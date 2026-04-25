@@ -1,0 +1,24 @@
+node_modules/
+.env
+.env.local
+dist/
+.next/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/.env
+frontend/.env.local
+frontend/dist/
+frontend/.next/
+frontend/build/
+frontend/.cache/
+
+# Backend
+backend/node_modules/
+backend/.env
+backend/.env.local
+backend/dist/
+backend/build/
+backend/logs/
+backend/*.log
