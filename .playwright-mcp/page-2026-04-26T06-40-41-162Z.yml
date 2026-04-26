@@ -1,0 +1,98 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e24] [cursor=pointer]:
+    - img [ref=e25]
+  - alert [ref=e28]
+  - generic [ref=e29]:
+    - complementary [ref=e30]:
+      - generic [ref=e31]: MoneyBoxAlgo
+      - navigation [ref=e32]:
+        - link "Dashboard" [ref=e33] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e34]
+          - text: Dashboard
+        - link "Strategies" [ref=e39] [cursor=pointer]:
+          - /url: /strategies
+          - img [ref=e40]
+          - text: Strategies
+        - link "Backtests" [ref=e43] [cursor=pointer]:
+          - /url: /backtests
+          - img [ref=e44]
+          - text: Backtests
+        - link "Paper Trading" [ref=e46] [cursor=pointer]:
+          - /url: /paper-trading
+          - img [ref=e47]
+          - text: Paper Trading
+        - link "Live Trading" [ref=e50] [cursor=pointer]:
+          - /url: /live-trading
+          - img [ref=e51]
+          - text: Live Trading
+        - link "Positions" [ref=e53] [cursor=pointer]:
+          - /url: /positions
+          - img [ref=e54]
+          - text: Positions
+        - link "Orders" [ref=e57] [cursor=pointer]:
+          - /url: /orders
+          - img [ref=e58]
+          - text: Orders
+        - link "Risk" [ref=e61] [cursor=pointer]:
+          - /url: /risk
+          - img [ref=e62]
+          - text: Risk
+        - link "Reports" [ref=e64] [cursor=pointer]:
+          - /url: /reports
+          - img [ref=e65]
+          - text: Reports
+        - link "Settings" [ref=e66] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e67]
+          - text: Settings
+      - button "Sign out" [ref=e70]:
+        - img [ref=e71]
+        - text: Sign out
+    - main [ref=e74]:
+      - generic [ref=e75]:
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - heading "Dashboard" [level=1] [ref=e78]
+            - paragraph [ref=e79]: System overview — paper mode active
+          - generic [ref=e82]: Paper Trading
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - paragraph [ref=e85]: Today's P&L
+            - paragraph [ref=e86]: +₹546
+          - generic [ref=e87]:
+            - paragraph [ref=e88]: Open Positions
+            - paragraph [ref=e89]: "2"
+          - generic [ref=e90]:
+            - paragraph [ref=e91]: Today's Win Rate
+            - paragraph [ref=e92]: —
+            - paragraph [ref=e93]: No trades today
+          - generic [ref=e94]:
+            - paragraph [ref=e95]: Active Strategies
+            - paragraph [ref=e96]: "0"
+            - paragraph [ref=e97]: 1 total
+        - generic [ref=e98]:
+          - generic [ref=e99]:
+            - generic [ref=e100]:
+              - heading "Strategies" [level=2] [ref=e101]
+              - generic [ref=e102]: Paper
+            - generic [ref=e104]:
+              - generic [ref=e105]: Precision Trend Rider
+              - generic [ref=e106]:
+                - generic [ref=e107]: 0 trades
+                - generic [ref=e108]: paused
+          - generic [ref=e109]:
+            - heading "System Status" [level=2] [ref=e110]
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - generic [ref=e114]: Backend
+                - generic [ref=e115]: API reachable
+              - generic [ref=e116]:
+                - generic [ref=e118]: MongoDB
+                - generic [ref=e119]: Connected
+              - generic [ref=e120]:
+                - generic [ref=e122]: Broker (Kite)
+                - generic [ref=e123]: Not connected
+              - generic [ref=e124]:
+                - generic [ref=e126]: Market Data
+                - generic [ref=e127]: Instrument sync required

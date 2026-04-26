@@ -9,6 +9,7 @@ import { MarketDataModule } from '../market-data/market-data.module';
 import { RiskModule } from '../risk/risk.module';
 import { ExecutionModule } from '../execution/execution.module';
 import { PortfolioModule } from '../portfolio/portfolio.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PortfolioModule } from '../portfolio/portfolio.module';
     RiskModule,
     ExecutionModule,
     PortfolioModule,
+    AuditModule,
   ],
   providers: [StrategiesService, StrategyEngineService],
   controllers: [StrategiesController],
