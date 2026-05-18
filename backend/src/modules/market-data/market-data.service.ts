@@ -5,6 +5,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Instrument, InstrumentDocument } from './schemas/instrument.schema';
 import { MarketBar, MarketBarDocument } from './schemas/market-bar.schema';
 import { KiteAdapterService } from '../broker/kite-adapter.service';
+import { AngelOneAdapterService, ANGEL_LOOKBACK_DAYS, ANGEL_INTERVAL_MAP } from './angel-one.adapter';
 
 export type CandleInterval =
   | 'minute' | '3minute' | '5minute' | '10minute' | '15minute'
@@ -18,6 +19,7 @@ export class MarketDataService {
     @InjectModel(Instrument.name) private instrumentModel: Model<InstrumentDocument>,
     @InjectModel(MarketBar.name) private barModel: Model<MarketBarDocument>,
     private kite: KiteAdapterService,
+    private angelOne: AngelOneAdapterService,
   ) {}
 
   // ── Instrument master ─────────────────────────────────────────────────────
@@ -171,6 +173,126 @@ export class MarketDataService {
       interval,
     });
     return { symbol, exchange, interval, count, oldest: oldest?.timestamp, latest: latest?.timestamp };
+  }
+
+  // ── Index data seeder (NIFTY 50, NIFTY BANK, INDIA VIX) ──────────────────────
+  // Uses hardcoded NSE instrument tokens — bypasses instrument-lookup for indices.
+  async seedIndexData(
+    accessToken: string,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<{ series: string; fetched: number; stored: number; error?: string }[]> {
+    const SERIES = [
+      { symbol: 'NIFTY 50',   exchange: 'NSE', token: 256265,  intervals: ['5minute', '15minute', 'day'] as CandleInterval[] },
+      { symbol: 'NIFTY BANK', exchange: 'NSE', token: 260105,  intervals: ['5minute', '15minute', 'day'] as CandleInterval[] },
+      { symbol: 'INDIA VIX',  exchange: 'NSE', token: 264969,  intervals: ['day'] as CandleInterval[] },
+    ];
+
+    // Zerodha max range per request: 100 days for 5/15-min, 2000 days for day
+    const MAX_DAYS: Record<string, number> = { '5minute': 100, '15minute': 100, 'day': 2000 };
+
+    const results: { series: string; fetched: number; stored: number; error?: string }[] = [];
+
+    for (const s of SERIES) {
+      for (const interval of s.intervals) {
+        const key = `${s.symbol}:${interval}`;
+        let totalFetched = 0;
+        let totalStored = 0;
+        try {
+          const chunkDays = MAX_DAYS[interval] ?? 100;
+          let cursor = new Date(fromDate);
+          while (cursor < toDate) {
+            const chunkEnd = new Date(Math.min(cursor.getTime() + chunkDays * 86_400_000, toDate.getTime()));
+            const raw = await this.kite.getHistoricalData(accessToken, s.token, interval, cursor, chunkEnd);
+            if (raw?.length) {
+              const ops = raw.map((c: any) => ({
+                updateOne: {
+                  filter: { symbol: s.symbol, exchange: s.exchange, interval, timestamp: new Date(c.date) },
+                  update: { $set: { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 } },
+                  upsert: true,
+                },
+              }));
+              const res = await this.barModel.bulkWrite(ops);
+              totalFetched += raw.length;
+              totalStored += (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
+            }
+            cursor = new Date(chunkEnd.getTime() + 86_400_000);
+            await new Promise((r) => setTimeout(r, 400)); // Kite rate limit
+          }
+          results.push({ series: key, fetched: totalFetched, stored: totalStored });
+          this.logger.log(`Seeded ${key}: fetched=${totalFetched} stored=${totalStored}`);
+        } catch (err: any) {
+          this.logger.error(`seedIndexData failed for ${key}: ${err.message}`);
+          results.push({ series: key, fetched: totalFetched, stored: totalStored, error: err.message });
+        }
+      }
+    }
+    return results;
+  }
+
+  // ── Angel One seed ────────────────────────────────────────────────────────
+
+  async seedFromAngelOne(fromDate: Date, toDate: Date): Promise<{ series: string; fetched: number; stored: number; error?: string }[]> {
+    const INSTRUMENTS = [
+      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', hasIntraday: true  },
+      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', hasIntraday: true  },
+      { symbol: 'INDIA VIX',  exchange: 'NSE', token: '99926017', hasIntraday: false },
+    ];
+
+    // Angel One intervals to seed for each instrument
+    const INTERVALS_ALL     = ['ONE_DAY', 'FIVE_MINUTE', 'FIFTEEN_MINUTE'];
+    const INTERVALS_DAY_ONLY = ['ONE_DAY'];
+
+    const results: { series: string; fetched: number; stored: number; error?: string }[] = [];
+    const now = new Date();
+
+    for (const inst of INSTRUMENTS) {
+      const intervals = inst.hasIntraday ? INTERVALS_ALL : INTERVALS_DAY_ONLY;
+
+      for (const angelInterval of intervals) {
+        const key = `${inst.symbol}:${ANGEL_INTERVAL_MAP[angelInterval]}`;
+        let fetched = 0, stored = 0;
+        try {
+          // Clamp fromDate to the max lookback Angel One allows for this interval
+          const maxLookback = ANGEL_LOOKBACK_DAYS[angelInterval];
+          const earliest = new Date(now.getTime() - maxLookback * 86_400_000);
+          const effectiveFrom = fromDate < earliest ? earliest : fromDate;
+
+          if (effectiveFrom >= toDate) {
+            results.push({ series: key, fetched: 0, stored: 0, error: 'Outside lookback window' });
+            continue;
+          }
+
+          this.logger.log(`Seeding ${key} from ${effectiveFrom.toISOString().slice(0,10)} → ${toDate.toISOString().slice(0,10)}`);
+
+          const candles = await this.angelOne.getCandles(
+            inst.token, inst.exchange, angelInterval, effectiveFrom, toDate,
+          );
+          fetched = candles.length;
+
+          if (candles.length) {
+            const ops = candles.map((c) => ({
+              updateOne: {
+                filter: { symbol: inst.symbol, exchange: inst.exchange, interval: ANGEL_INTERVAL_MAP[angelInterval], timestamp: c.timestamp },
+                update: { $set: { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume } },
+                upsert: true,
+              },
+            }));
+            const res = await this.barModel.bulkWrite(ops);
+            stored = (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
+          }
+
+          this.logger.log(`${key}: fetched=${fetched} stored=${stored}`);
+          results.push({ series: key, fetched, stored });
+
+          await new Promise((r) => setTimeout(r, 300)); // Angel One rate limit
+        } catch (err: any) {
+          this.logger.error(`Angel One seed failed for ${key}: ${err.message}`);
+          results.push({ series: key, fetched, stored, error: err.message });
+        }
+      }
+    }
+    return results;
   }
 
   async bulkFetchAndStore(

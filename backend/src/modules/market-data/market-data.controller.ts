@@ -75,6 +75,22 @@ export class MarketDataController {
     return this.marketDataService.getCoverage(symbol, exchange, interval as CandleInterval);
   }
 
+  @Post('seed-index')
+  async seedIndex(
+    @CurrentUser() user: any,
+    @Body() body: { fromDate: string; toDate: string },
+  ) {
+    if (!body.fromDate || !body.toDate) throw new BadRequestException('fromDate and toDate required');
+    const accessToken = await this.brokerService.getValidAccessToken(user._id.toString());
+    return this.marketDataService.seedIndexData(accessToken, new Date(body.fromDate), new Date(body.toDate));
+  }
+
+  @Post('seed-angel')
+  async seedAngel(@Body() body: { fromDate: string; toDate: string }) {
+    if (!body.fromDate || !body.toDate) throw new BadRequestException('fromDate and toDate required');
+    return this.marketDataService.seedFromAngelOne(new Date(body.fromDate), new Date(body.toDate));
+  }
+
   @Post('candles/bulk-fetch')
   async bulkFetch(@CurrentUser() user: any, @Body() dto: BulkFetchDto) {
     const accessToken = await this.brokerService.getValidAccessToken(user._id.toString());
