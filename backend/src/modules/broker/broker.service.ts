@@ -119,6 +119,15 @@ export class BrokerService {
     return account!;
   }
 
+  async getFirstValidAccessToken(): Promise<string | null> {
+    const account = await this.brokerModel
+      .findOne({ status: BrokerAccountStatus.CONNECTED, broker: BrokerName.ZERODHA })
+      .select('+accessToken');
+    if (!account?.accessToken) return null;
+    if (account.tokenExpiresAt && new Date() > account.tokenExpiresAt) return null;
+    return account.accessToken;
+  }
+
   async getPaperStatus(userId: string) {
     const account = await this.brokerModel.findOne({
       userId: new Types.ObjectId(userId),

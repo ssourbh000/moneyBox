@@ -22,3 +22,4 @@ backend/dist/
 backend/build/
 backend/logs/
 backend/*.log
+.playwright-mcp/

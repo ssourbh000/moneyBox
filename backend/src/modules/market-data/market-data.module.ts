@@ -5,6 +5,7 @@ import { MarketDataController } from './market-data.controller';
 import { Instrument, InstrumentSchema } from './schemas/instrument.schema';
 import { MarketBar, MarketBarSchema } from './schemas/market-bar.schema';
 import { BrokerModule } from '../broker/broker.module';
+import { AngelOneAdapterService } from './angel-one.adapter';
 
 @Module({
   imports: [
@@ -14,8 +15,8 @@ import { BrokerModule } from '../broker/broker.module';
     ]),
     BrokerModule,
   ],
-  providers: [MarketDataService],
+  providers: [MarketDataService, AngelOneAdapterService],
   controllers: [MarketDataController],
-  exports: [MarketDataService],
+  exports: [MarketDataService, AngelOneAdapterService],
 })
 export class MarketDataModule {}

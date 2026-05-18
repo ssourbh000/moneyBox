@@ -15,6 +15,8 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { RiskModule } from './modules/risk/risk.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { OptionBacktestModule } from './modules/option-backtest/option-backtest.module';
+import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { AuditModule } from './modules/audit/audit.module';
     RiskModule,
     ReportsModule,
     AuditModule,
+    OptionBacktestModule,
+    LiveSignalModule,
   ],
 })
 export class AppModule {}
