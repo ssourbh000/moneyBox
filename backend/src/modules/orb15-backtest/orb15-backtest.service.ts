@@ -9,18 +9,14 @@ import {
   istHHMM, istDayOfWeek, isNewDay,
 } from '../strategies/option-indicators';
 
-// ── Strategy B: 45-minute ORB ─────────────────────────────────────────────────
+// ── Strategy B v2: 45-minute ORB + Multi-Timeframe + Volume ──────────────────
 //
-//  Uses the first 9 five-minute bars (9:15–9:55) as the opening range (45 min).
-//  This creates wider, more reliable ORB levels compared to the 15-min original.
-//  No Supertrend flip required — entry fires when all of these align:
-//    • Price breaks and closes above/below the 45-min ORB
-//    • Supertrend direction confirms (filter, not flip)
-//    • EMA(9) in same direction as EMA(21)
-//    • RSI > 50 (bull) / RSI < 50 (bear)
-//    • VWAP confirms direction
-//  Max 3 trades/day with 20-min cooldown.
-//  Entry window 10:00 AM – 2:00 PM (ORB established by 10:00).
+//  All v1 filters (ADX > 20, ATR SL, 20% trail) plus:
+//    • 15-min EMA(9)/EMA(21) alignment — multi-timeframe trend confirmation
+//    • Volume surge: entry bar volume > 1.5× 20-bar rolling average
+//    • RSI thresholds tightened: > 60 (bull) / < 40 (bear) on 5-min
+//    • Previous Day High/Low break: price must clear PDH (CALL) or PDL (PUT)
+//    • Gap direction bias: large gaps lock direction (gap-up → CALL only, gap-down → PUT only)
 
 const INSTRUMENTS = [
   { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 25, tickSize: 50  },
@@ -37,8 +33,11 @@ const ENTRY_FROM         = 1000;   // entry after ORB is set (10:00 AM)
 const ENTRY_TO           = 1400;
 const EXIT_TIME          = 1500;
 const VIX_MAX            = 20;
-const RSI_BULL           = 50;
-const RSI_BEAR           = 50;
+const RSI_BULL           = 60;   // tightened from 50 → stronger momentum required
+const RSI_BEAR           = 40;   // tightened from 50 → stronger momentum required
+const VOL_SURGE          = 1.5;  // entry bar volume must be > 1.5× rolling avg
+const VOL_AVG_BARS       = 20;   // rolling window for volume average
+const GAP_THRESHOLD      = 0.005; // 0.5% gap locks direction for the day
 const MAX_TRADES_PER_DAY = 3;
 const COOLDOWN_MS        = 20 * 60 * 1000;
 const ST_PERIOD          = 10;
@@ -128,19 +127,36 @@ export class Orb15BacktestService {
 
   private async simulateInstrument(inst: typeof INSTRUMENTS[number], from: Date, to: Date, vixMap: Map<string, number>): Promise<O15Trade[]> {
     const lookback = new Date(from); lookback.setMonth(lookback.getMonth() - 1);
-    const bars5 = await this.marketData.getCandles(inst.symbol, inst.exchange, '5minute', lookback, to);
+    const [bars5, bars15] = await Promise.all([
+      this.marketData.getCandles(inst.symbol, inst.exchange, '5minute', lookback, to),
+      this.marketData.getCandles(inst.symbol, inst.exchange, '15minute', lookback, to),
+    ]);
     if (bars5.length < 50) return [];
 
     const trades: O15Trade[] = [];
     let sessionBars: OHLCV[] = [], prevBar: typeof bars5[0] | null = null;
     const rollingBars: OHLCV[] = [];
+    const rolling15: OHLCV[] = [];
+    let bar15Idx = 0;
     let orbHigh = 0, orbLow = 0, orbSet = false;
     let openTrade: OpenO15Trade | null = null;
     let tradesOpenedToday = 0, lastTradeExitTime: Date | null = null;
+    // PDH/PDL and gap tracking
+    let pdHigh = 0, pdLow = Infinity, dayHigh = 0, dayLow = Infinity;
+    let prevDayClose = 0, todayOpen = 0;
+    let gapDir: 'UP' | 'DOWN' | 'NONE' = 'NONE';
 
     for (const bar of bars5) {
       const barDate = bar.timestamp, hhmm = istHHMM(barDate), dow = istDayOfWeek(barDate);
       const ohlcv: OHLCV = { open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume };
+
+      // Advance 15-min bar pointer — include all 15-min bars up to current 5-min bar
+      while (bar15Idx < bars15.length && bars15[bar15Idx].timestamp <= barDate) {
+        const b = bars15[bar15Idx];
+        rolling15.push({ open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume });
+        if (rolling15.length > 150) rolling15.shift();
+        bar15Idx++;
+      }
 
       if (!prevBar || isNewDay(prevBar.timestamp, barDate)) {
         if (openTrade && prevBar) {
@@ -149,8 +165,20 @@ export class Orb15BacktestService {
           trades.push(this.mk(inst, openTrade, ep, prevBar.timestamp, 'EOD'));
           lastTradeExitTime = prevBar.timestamp; openTrade = null;
         }
+        // Save previous day stats before reset
+        if (dayHigh > 0) { pdHigh = dayHigh; pdLow = dayLow; prevDayClose = prevBar?.close ?? 0; }
+        todayOpen = bar.open;
+        // Gap direction: if today's open deviates > 0.5% from prev day close
+        if (prevDayClose > 0) {
+          const gapPct = (todayOpen - prevDayClose) / prevDayClose;
+          gapDir = gapPct > GAP_THRESHOLD ? 'UP' : gapPct < -GAP_THRESHOLD ? 'DOWN' : 'NONE';
+        }
+        dayHigh = bar.high; dayLow = bar.low;
         sessionBars = []; orbSet = false; orbHigh = orbLow = 0;
         tradesOpenedToday = 0; lastTradeExitTime = null;
+      } else {
+        dayHigh = Math.max(dayHigh, bar.high);
+        dayLow = Math.min(dayLow, bar.low);
       }
       prevBar = bar;
       rollingBars.push(ohlcv); if (rollingBars.length > 200) rollingBars.shift();
@@ -198,10 +226,36 @@ export class Orb15BacktestService {
       const adxVal = adx(rollingBars, 14);
       if (adxVal < 20) continue;
 
-      // ── Entry: ORB break + EMA + ST direction + VWAP + RSI ──────────────────
+      // ── Entry: ORB break + EMA + ST direction + VWAP + RSI (60/40) ──────────
       const callOk = bar.close > orbHigh && tN === 1 && efN > esN && bar.close > vwV && rsiV > RSI_BULL;
       const putOk  = bar.close < orbLow  && tN === -1 && efN < esN && bar.close < vwV && rsiV < RSI_BEAR;
       if (!callOk && !putOk) continue;
+
+      // ── Gap direction lock: large gap → only trade with gap direction ─────────
+      if (gapDir === 'UP' && putOk && !callOk) continue;
+      if (gapDir === 'DOWN' && callOk && !putOk) continue;
+
+      // ── PDH/PDL break: price must clear previous day's extreme ───────────────
+      if (pdHigh > 0 && pdLow < Infinity) {
+        if (callOk && bar.close <= pdHigh) continue;
+        if (putOk  && bar.close >= pdLow)  continue;
+      }
+
+      // ── Volume surge: entry bar must show conviction (>1.5× avg volume) ──────
+      const recentVols = rollingBars.slice(-VOL_AVG_BARS).map(b => b.volume);
+      const volAvg = recentVols.reduce((s, v) => s + v, 0) / recentVols.length;
+      if (volAvg > 0 && bar.volume < volAvg * VOL_SURGE) continue;
+
+      // ── 15-min MTF EMA: higher-timeframe trend must align ────────────────────
+      if (rolling15.length >= EMA_SLOW + 5) {
+        const c15 = rolling15.map(b => b.close);
+        const ef15 = ema(c15, EMA_FAST), es15 = ema(c15, EMA_SLOW);
+        const ef15N = ef15[ef15.length - 1], es15N = es15[es15.length - 1];
+        if (ef15N && es15N) {
+          if (callOk && ef15N <= es15N) continue;
+          if (putOk  && ef15N >= es15N) continue;
+        }
+      }
 
       const dir: 'CALL' | 'PUT' = callOk ? 'CALL' : 'PUT';
       const strike = itmStrike(bar.close, dir, inst.tickSize);
@@ -216,7 +270,7 @@ export class Orb15BacktestService {
       const slP = +(ep * dynSlPct).toFixed(2);
       const lots = Math.max(1, Math.floor(MAX_RISK_PER_TRADE / ((ep - slP) * inst.lotSize)));
       tradesOpenedToday++;
-      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday } };
+      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday, gapDir, adx: +adxVal.toFixed(1) } };
     }
     return trades;
   }

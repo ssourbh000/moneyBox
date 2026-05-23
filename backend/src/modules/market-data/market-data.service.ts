@@ -234,9 +234,11 @@ export class MarketDataService {
 
   async seedFromAngelOne(fromDate: Date, toDate: Date): Promise<{ series: string; fetched: number; stored: number; error?: string }[]> {
     const INSTRUMENTS = [
-      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', hasIntraday: true  },
-      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', hasIntraday: true  },
-      { symbol: 'INDIA VIX',  exchange: 'NSE', token: '99926017', hasIntraday: false },
+      { symbol: 'NIFTY 50',          exchange: 'NSE', token: '99926000', hasIntraday: true  },
+      { symbol: 'NIFTY BANK',        exchange: 'NSE', token: '99926009', hasIntraday: true  },
+      { symbol: 'INDIA VIX',         exchange: 'NSE', token: '99926017', hasIntraday: false },
+      { symbol: 'NIFTY FIN SERVICE', exchange: 'NSE', token: '99926037', hasIntraday: true  },
+      { symbol: 'NIFTY MIDCAP SELECT', exchange: 'NSE', token: '99926074', hasIntraday: true  },
     ];
 
     // Angel One intervals to seed for each instrument
