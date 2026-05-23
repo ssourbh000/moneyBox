@@ -15,6 +15,7 @@ import {
   Zap,
   LogOut,
   CandlestickChart,
+  TrendingDown,
   Activity,
   GitCompare,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ const nav = [
   { href: '/strategy-compare', label: 'Strategy Compare', icon: GitCompare },
   { href: '/option-backtest', label: 'Original Strategy', icon: CandlestickChart },
   { href: '/orb15-backtest', label: 'B — 45-min ORB', icon: CandlestickChart },
+  { href: '/expiry-spread-backtest', label: 'C — Expiry Spread', icon: TrendingDown },
   { href: '/live-signals', label: 'Live Signals', icon: Activity },
   { href: '/paper-trading', label: 'Paper Trading', icon: FileText },
   { href: '/live-trading', label: 'Live Trading', icon: Zap },

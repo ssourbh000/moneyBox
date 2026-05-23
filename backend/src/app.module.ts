@@ -17,6 +17,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { OptionBacktestModule } from './modules/option-backtest/option-backtest.module';
 import { Orb15BacktestModule } from './modules/orb15-backtest/orb15-backtest.module';
+import { ExpirySpreadBacktestModule } from './modules/expiry-spread-backtest/expiry-spread-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 
 @Module({
@@ -46,6 +47,7 @@ import { LiveSignalModule } from './modules/live-signal/live-signal.module';
     AuditModule,
     OptionBacktestModule,
     Orb15BacktestModule,
+    ExpirySpreadBacktestModule,
     LiveSignalModule,
   ],
 })
