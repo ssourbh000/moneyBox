@@ -9,13 +9,14 @@ import {
   istHHMM, istDayOfWeek, isNewDay,
 } from '../strategies/option-indicators';
 
-// ── Strategy B v3: v2 + Afternoon Re-entry Window ────────────────────────────
+// ── Strategy B v4: v3 + VIX Regime Mode ──────────────────────────────────────
 //
-//  All v2 filters plus:
-//    • Entry window extended 10:00–14:30 (was 14:00) — captures afternoon
-//      momentum continuation where trend often accelerates into close
-//    • Same strict filters apply in the PM window (no relaxation)
-//    • Max trades/day raised to 4 to allow one additional PM entry
+//  Removes hard VIX ≤ 20 cap and replaces it with 3 regime modes:
+//    CALM   (VIX ≤ 15):  normal params, full filters
+//    NORMAL (VIX 15–20): normal params (same as before)
+//    HIGH   (VIX 20–28): relaxed RSI (55/45), ADX ≥ 25, wider trail 25%
+//    CRISIS (VIX > 28):  only trade WITH gap direction, 1 trade/day max,
+//                        ADX ≥ 30, RSI 65/35 — captures panic-move profit
 
 const INSTRUMENTS = [
   { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 25, tickSize: 50  },
@@ -28,16 +29,30 @@ const SL_PCT             = 0.45;
 const TRAIL_PCT          = 0.20;   // trail SL at 20% below running peak premium
 const PARTIAL_MULT       = 1.8;
 const ORB_BARS           = 9;      // 9 × 5min = 45-min opening range
-const ENTRY_FROM         = 1000;   // entry after ORB is set (10:00 AM)
-const ENTRY_TO           = 1430;   // extended to 14:30 for afternoon continuation
+const ENTRY_FROM         = 1000;
+const ENTRY_TO           = 1430;
 const EXIT_TIME          = 1500;
-const VIX_MAX            = 20;
-const RSI_BULL           = 60;   // tightened from 50 → stronger momentum required
-const RSI_BEAR           = 40;   // tightened from 50 → stronger momentum required
-const VOL_SURGE          = 1.5;  // entry bar volume must be > 1.5× rolling avg
-const VOL_AVG_BARS       = 20;   // rolling window for volume average
-const GAP_THRESHOLD      = 0.005; // 0.5% gap locks direction for the day
-const MAX_TRADES_PER_DAY = 4;   // +1 for afternoon window
+// VIX regime thresholds — no hard cap, just different params per regime
+const VIX_NORMAL_MAX     = 20;
+const VIX_HIGH_MAX       = 28;
+// CALM / NORMAL regime params (VIX ≤ 20)
+const RSI_BULL           = 60;
+const RSI_BEAR           = 40;
+const ADX_MIN            = 20;
+// HIGH regime params (VIX 20–28)
+const RSI_BULL_HIGH      = 55;
+const RSI_BEAR_HIGH      = 45;
+const ADX_MIN_HIGH       = 25;
+const TRAIL_PCT_HIGH     = 0.25;
+// CRISIS regime params (VIX > 28)
+const RSI_BULL_CRISIS    = 65;
+const RSI_BEAR_CRISIS    = 35;
+const ADX_MIN_CRISIS     = 30;
+const MAX_TRADES_CRISIS  = 1;
+const VOL_SURGE          = 1.5;
+const VOL_AVG_BARS       = 20;
+const GAP_THRESHOLD      = 0.005;
+const MAX_TRADES_PER_DAY = 4;
 const COOLDOWN_MS        = 20 * 60 * 1000;
 const ST_PERIOD          = 10;
 const ST_MULT            = 3;
@@ -185,7 +200,13 @@ export class Orb15BacktestService {
       if (barDate < from) { sessionBars.push(ohlcv); continue; }
       if (dow === 0 || dow === 5 || dow === 6) continue;
       const vix = vixMap.get(barDate.toISOString().slice(0, 10)) ?? 15;
-      if (vix > VIX_MAX) { sessionBars.push(ohlcv); continue; }
+      // ── VIX regime classification — no hard cap ──────────────────────────────
+      const regime = vix <= VIX_NORMAL_MAX ? 'NORMAL' : vix <= VIX_HIGH_MAX ? 'HIGH' : 'CRISIS';
+      const rsiBull  = regime === 'CRISIS' ? RSI_BULL_CRISIS : regime === 'HIGH' ? RSI_BULL_HIGH  : RSI_BULL;
+      const rsiBear  = regime === 'CRISIS' ? RSI_BEAR_CRISIS : regime === 'HIGH' ? RSI_BEAR_HIGH  : RSI_BEAR;
+      const adxMin   = regime === 'CRISIS' ? ADX_MIN_CRISIS  : regime === 'HIGH' ? ADX_MIN_HIGH   : ADX_MIN;
+      const trailPct = regime === 'HIGH' ? TRAIL_PCT_HIGH : TRAIL_PCT;
+      const maxTrades = regime === 'CRISIS' ? MAX_TRADES_CRISIS : MAX_TRADES_PER_DAY;
       sessionBars.push(ohlcv);
 
       // ── 45-min ORB: wait for 9 session bars ─────────────────────────────────
@@ -197,9 +218,9 @@ export class Orb15BacktestService {
       if (openTrade) {
         const T = this.tte(barDate);
         const cp = bsPrice(bar.close, openTrade.strike, RISK_FREE_RATE, T, vix / 100, openTrade.direction === 'CALL' ? 'call' : 'put');
-        // Continuous trailing SL — update peak and ratchet SL up (never down)
+        // Continuous trailing SL with regime-aware trail percentage
         if (cp > openTrade.peakPremium) openTrade.peakPremium = cp;
-        const contTrailSL = +(openTrade.peakPremium * (1 - TRAIL_PCT)).toFixed(2);
+        const contTrailSL = +(openTrade.peakPremium * (1 - trailPct)).toFixed(2);
         if (contTrailSL > openTrade.slPremium) { openTrade.slPremium = contTrailSL; openTrade.trailSL = true; }
         // Partial TP at 1.8× — exit half lots
         if (!openTrade.partialBooked && cp >= openTrade.entryPremium * PARTIAL_MULT) { openTrade.partialBooked = true; openTrade.lots = Math.max(1, Math.floor(openTrade.lots / 2)); }
@@ -209,9 +230,12 @@ export class Orb15BacktestService {
       }
 
       if (!orbSet || hhmm < ENTRY_FROM || hhmm > ENTRY_TO) continue;
-      if (tradesOpenedToday >= MAX_TRADES_PER_DAY) continue;
+      if (tradesOpenedToday >= maxTrades) continue;
       if (lastTradeExitTime && barDate.getTime() - lastTradeExitTime.getTime() < COOLDOWN_MS) continue;
       if (rollingBars.length < Math.max(EMA_SLOW, RSI_PERIOD, ST_PERIOD * 2) + 5) continue;
+
+      // CRISIS regime: only trade with gap direction
+      if (regime === 'CRISIS' && gapDir === 'NONE') continue;
 
       const rc = rollingBars.map(b => b.close);
       const efArr = ema(rc, EMA_FAST), esArr = ema(rc, EMA_SLOW), rvArr = rsi(rc, RSI_PERIOD);
@@ -221,13 +245,13 @@ export class Orb15BacktestService {
       const tN = st.trend[st.trend.length - 1];
       if (!efN || !esN || !rsiV || !vwV || tN === 0) continue;
 
-      // ── ADX filter: only trade when market is trending ───────────────────────
+      // ── ADX filter: regime-aware minimum ────────────────────────────────────
       const adxVal = adx(rollingBars, 14);
-      if (adxVal < 20) continue;
+      if (adxVal < adxMin) continue;
 
-      // ── Entry: ORB break + EMA + ST direction + VWAP + RSI (60/40) ──────────
-      const callOk = bar.close > orbHigh && tN === 1 && efN > esN && bar.close > vwV && rsiV > RSI_BULL;
-      const putOk  = bar.close < orbLow  && tN === -1 && efN < esN && bar.close < vwV && rsiV < RSI_BEAR;
+      // ── Entry: ORB break + EMA + ST direction + VWAP + regime-aware RSI ────────
+      const callOk = bar.close > orbHigh && tN === 1 && efN > esN && bar.close > vwV && rsiV > rsiBull;
+      const putOk  = bar.close < orbLow  && tN === -1 && efN < esN && bar.close < vwV && rsiV < rsiBear;
       if (!callOk && !putOk) continue;
 
       // ── Gap direction lock: large gap → only trade with gap direction ─────────
@@ -269,7 +293,7 @@ export class Orb15BacktestService {
       const slP = +(ep * dynSlPct).toFixed(2);
       const lots = Math.max(1, Math.floor(MAX_RISK_PER_TRADE / ((ep - slP) * inst.lotSize)));
       tradesOpenedToday++;
-      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday, gapDir, adx: +adxVal.toFixed(1) } };
+      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday, gapDir, adx: +adxVal.toFixed(1), regime, vixVal: +vix.toFixed(1) } };
     }
     return trades;
   }
