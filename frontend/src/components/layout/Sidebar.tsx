@@ -16,6 +16,7 @@ import {
   LogOut,
   CandlestickChart,
   Activity,
+  GitCompare,
 } from 'lucide-react';
 import { authService } from '@/services/auth.service';
 
@@ -23,7 +24,13 @@ const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/strategies', label: 'Strategies', icon: TrendingUp },
   { href: '/backtests', label: 'Backtests', icon: FlaskConical },
-  { href: '/option-backtest', label: 'Option Backtest', icon: CandlestickChart },
+  { href: '/strategy-compare', label: 'Strategy Compare', icon: GitCompare },
+  { href: '/option-backtest', label: 'Original Strategy', icon: CandlestickChart },
+  { href: '/stflip-backtest', label: 'A — Relaxed Flip', icon: CandlestickChart },
+  { href: '/orb15-backtest', label: 'B — 45-min ORB', icon: CandlestickChart },
+  { href: '/vwap-scalp', label: 'C — VWAP Scalp', icon: CandlestickChart },
+  { href: '/emacross-backtest', label: 'D — EMA Cross', icon: CandlestickChart },
+  { href: '/hft-backtest', label: 'D+A — EMA+Relaxed', icon: Zap },
   { href: '/live-signals', label: 'Live Signals', icon: Activity },
   { href: '/paper-trading', label: 'Paper Trading', icon: FileText },
   { href: '/live-trading', label: 'Live Trading', icon: Zap },
