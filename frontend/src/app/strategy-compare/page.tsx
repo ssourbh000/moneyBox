@@ -19,44 +19,12 @@ const STRATEGIES = [
     badge:    'bg-gray-700 text-gray-300',
   },
   {
-    key:      'stflip',
-    label:    'A — Relaxed Flip',
-    subtitle: 'ST Flip trigger · 9:30–14:00 · VIX≤20 · RSI 52/48 · 2/day',
-    endpoint: 'stflip-backtest',
-    color:    'border-blue-500',
-    badge:    'bg-blue-900 text-blue-300',
-  },
-  {
     key:      'orb15',
     label:    'B — 45-min ORB',
     subtitle: '45-min range · EMA direction · 10:00–14:00 · 3/day',
     endpoint: 'orb15-backtest',
     color:    'border-purple-500',
     badge:    'bg-purple-900 text-purple-300',
-  },
-  {
-    key:      'vwap',
-    label:    'C — VWAP Scalp',
-    subtitle: 'VWAP bounce · SL 30% · 3 trades/day · 9:45–14:00',
-    endpoint: 'vwap-scalp',
-    color:    'border-orange-500',
-    badge:    'bg-orange-900 text-orange-300',
-  },
-  {
-    key:      'emacross',
-    label:    'D — EMA Cross (tight)',
-    subtitle: 'EMA(9/21) cross · original strict params · 9:30–10:30',
-    endpoint: 'emacross-backtest',
-    color:    'border-green-500',
-    badge:    'bg-green-900 text-green-300',
-  },
-  {
-    key:      'hft',
-    label:    'D+A — EMA Cross (relaxed)',
-    subtitle: 'EMA(9/21) cross · 9:30–14:00 · VIX≤20 · RSI 52/48 · 2/day',
-    endpoint: 'hft-backtest',
-    color:    'border-yellow-500',
-    badge:    'bg-yellow-900 text-yellow-300',
   },
 ] as const;
 
@@ -233,7 +201,7 @@ export default function StrategyComparePage() {
             className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-sm font-semibold"
           >
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-            {running ? 'Running all…' : 'Run All 6 Strategies'}
+            {running ? 'Running…' : 'Run Both Strategies'}
           </button>
           {completedCount > 0 && (
             <span className="text-sm text-gray-400 self-center">{completedCount} / {STRATEGIES.length} completed</span>

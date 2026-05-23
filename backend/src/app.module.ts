@@ -16,11 +16,7 @@ import { RiskModule } from './modules/risk/risk.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { OptionBacktestModule } from './modules/option-backtest/option-backtest.module';
-import { HftBacktestModule } from './modules/hft-backtest/hft-backtest.module';
-import { StflipBacktestModule } from './modules/stflip-backtest/stflip-backtest.module';
 import { Orb15BacktestModule } from './modules/orb15-backtest/orb15-backtest.module';
-import { VwapScalpModule } from './modules/vwap-scalp/vwap-scalp.module';
-import { EmacrossBacktestModule } from './modules/emacross-backtest/emacross-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 
 @Module({
@@ -49,11 +45,7 @@ import { LiveSignalModule } from './modules/live-signal/live-signal.module';
     ReportsModule,
     AuditModule,
     OptionBacktestModule,
-    HftBacktestModule,
-    StflipBacktestModule,
     Orb15BacktestModule,
-    VwapScalpModule,
-    EmacrossBacktestModule,
     LiveSignalModule,
   ],
 })
