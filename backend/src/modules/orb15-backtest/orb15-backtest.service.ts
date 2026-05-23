@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Orb15BacktestRun, Orb15BacktestRunDocument, O15Status } from './schemas/orb15-backtest-run.schema';
 import { MarketDataService } from '../market-data/market-data.service';
-import { ema, rsi, OHLCV } from '../strategies/indicators';
+import { ema, rsi, adx, atr, OHLCV } from '../strategies/indicators';
 import {
   bsPrice, itmStrike, calcVWAP, calcSupertrend, calcORB,
   istHHMM, istDayOfWeek, isNewDay,
@@ -30,6 +30,7 @@ const INSTRUMENTS = [
 const RISK_FREE_RATE     = 0.07;
 const MAX_RISK_PER_TRADE = 4000;
 const SL_PCT             = 0.45;
+const TRAIL_PCT          = 0.20;   // trail SL at 20% below running peak premium
 const PARTIAL_MULT       = 1.8;
 const ORB_BARS           = 9;      // 9 × 5min = 45-min opening range
 const ENTRY_FROM         = 1000;   // entry after ORB is set (10:00 AM)
@@ -57,7 +58,7 @@ interface O15Trade {
 interface OpenO15Trade {
   direction: 'CALL' | 'PUT'; strike: number; entryPremium: number; entryTime: Date;
   slPremium: number; targetPremium: number; lots: number; partialBooked: boolean;
-  trailSL: boolean; vix: number; meta: Record<string, number | string>;
+  trailSL: boolean; peakPremium: number; vix: number; meta: Record<string, number | string>;
 }
 
 function mean(a: number[]) { return a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0; }
@@ -169,7 +170,12 @@ export class Orb15BacktestService {
       if (openTrade) {
         const T = this.tte(barDate);
         const cp = bsPrice(bar.close, openTrade.strike, RISK_FREE_RATE, T, vix / 100, openTrade.direction === 'CALL' ? 'call' : 'put');
-        if (!openTrade.partialBooked && cp >= openTrade.entryPremium * PARTIAL_MULT) { openTrade.partialBooked = true; openTrade.trailSL = true; openTrade.slPremium = openTrade.entryPremium; openTrade.lots = Math.max(1, Math.floor(openTrade.lots / 2)); }
+        // Continuous trailing SL — update peak and ratchet SL up (never down)
+        if (cp > openTrade.peakPremium) openTrade.peakPremium = cp;
+        const contTrailSL = +(openTrade.peakPremium * (1 - TRAIL_PCT)).toFixed(2);
+        if (contTrailSL > openTrade.slPremium) { openTrade.slPremium = contTrailSL; openTrade.trailSL = true; }
+        // Partial TP at 1.8× — exit half lots
+        if (!openTrade.partialBooked && cp >= openTrade.entryPremium * PARTIAL_MULT) { openTrade.partialBooked = true; openTrade.lots = Math.max(1, Math.floor(openTrade.lots / 2)); }
         if (cp <= openTrade.slPremium) { trades.push(this.mk(inst, openTrade, openTrade.slPremium, barDate, openTrade.trailSL ? 'TRAIL_SL' : 'SL')); lastTradeExitTime = barDate; openTrade = null; }
         else if (hhmm >= EXIT_TIME) { trades.push(this.mk(inst, openTrade, cp, barDate, 'EOD')); lastTradeExitTime = barDate; openTrade = null; }
         continue;
@@ -188,6 +194,10 @@ export class Orb15BacktestService {
       const tN = st.trend[st.trend.length - 1];
       if (!efN || !esN || !rsiV || !vwV || tN === 0) continue;
 
+      // ── ADX filter: only trade when market is trending ───────────────────────
+      const adxVal = adx(rollingBars, 14);
+      if (adxVal < 20) continue;
+
       // ── Entry: ORB break + EMA + ST direction + VWAP + RSI ──────────────────
       const callOk = bar.close > orbHigh && tN === 1 && efN > esN && bar.close > vwV && rsiV > RSI_BULL;
       const putOk  = bar.close < orbLow  && tN === -1 && efN < esN && bar.close < vwV && rsiV < RSI_BEAR;
@@ -198,10 +208,15 @@ export class Orb15BacktestService {
       const T = this.tte(barDate);
       const ep = bsPrice(bar.close, strike, RISK_FREE_RATE, T, vix / 100, dir === 'CALL' ? 'call' : 'put');
       if (ep < 10) continue;
-      const slP = +(ep * SL_PCT).toFixed(2);
+      // ATR dynamic SL: tighter on low-vol days, wider on high-vol (range 25%–45%)
+      const atrArr = atr(rollingBars, 14);
+      const atrVal = atrArr[atrArr.length - 1] ?? 0;
+      const atrPct = atrVal > 0 ? Math.min(atrVal / bar.close, 0.03) : 0.015;
+      const dynSlPct = Math.max(0.25, Math.min(SL_PCT, atrPct * 15));
+      const slP = +(ep * dynSlPct).toFixed(2);
       const lots = Math.max(1, Math.floor(MAX_RISK_PER_TRADE / ((ep - slP) * inst.lotSize)));
       tradesOpenedToday++;
-      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday } };
+      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday } };
     }
     return trades;
   }
