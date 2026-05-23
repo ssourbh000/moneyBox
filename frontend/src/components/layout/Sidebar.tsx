@@ -25,6 +25,7 @@ const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/strategies', label: 'Strategies', icon: TrendingUp },
   { href: '/backtests', label: 'Backtests', icon: FlaskConical },
+  { href: '/portfolio-backtest', label: 'Portfolio Sim', icon: BarChart2 },
   { href: '/strategy-compare', label: 'Strategy Compare', icon: GitCompare },
   { href: '/option-backtest', label: 'Original Strategy', icon: CandlestickChart },
   { href: '/orb15-backtest', label: 'B — 45-min ORB', icon: CandlestickChart },

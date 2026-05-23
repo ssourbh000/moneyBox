@@ -115,6 +115,16 @@ export class Orb15BacktestService {
     return this.runModel.find({ userId: new Types.ObjectId(userId) }).sort({ createdAt: -1 }).limit(20).select('-trades');
   }
 
+  async simulateTrades(fromDate: string, toDate: string): Promise<(O15Trade & { _strategy: 'ORB' })[]> {
+    const from = new Date(fromDate), to = new Date(toDate);
+    const vixBars = await this.marketData.getCandles('INDIA VIX', 'NSE', 'day', from, to);
+    const vixMap = new Map<string, number>();
+    for (const v of vixBars) vixMap.set(v.timestamp.toISOString().slice(0, 10), v.close);
+    const all: O15Trade[] = [];
+    for (const inst of INSTRUMENTS) all.push(...await this.simulateInstrument(inst, from, to, vixMap));
+    return all.map(t => ({ ...t, _strategy: 'ORB' as const }));
+  }
+
   private async execute(runId: string, fromDate: string, toDate: string) {
     await this.runModel.findByIdAndUpdate(runId, { status: O15Status.RUNNING });
     try {
