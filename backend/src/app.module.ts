@@ -18,6 +18,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { OptionBacktestModule } from './modules/option-backtest/option-backtest.module';
 import { Orb15BacktestModule } from './modules/orb15-backtest/orb15-backtest.module';
 import { ExpirySpreadBacktestModule } from './modules/expiry-spread-backtest/expiry-spread-backtest.module';
+import { EventAlphaBacktestModule } from './modules/event-alpha-backtest/event-alpha-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 
 @Module({
@@ -48,6 +49,7 @@ import { LiveSignalModule } from './modules/live-signal/live-signal.module';
     OptionBacktestModule,
     Orb15BacktestModule,
     ExpirySpreadBacktestModule,
+    EventAlphaBacktestModule,
     LiveSignalModule,
   ],
 })
