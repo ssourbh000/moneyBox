@@ -34,6 +34,7 @@ const EXPIRY_IV_MULT     = 2.2;    // expiry day near-term IV ≈ 2.2× VIX (the
 const ENTRY_HHMM         = 1030;   // enter at exactly 10:30 AM bar
 const EXIT_HHMM          = 1515;   // force exit 3:15 PM (15 min before expiry settlement)
 const TP_DECAY           = 0.30;   // close when spread value ≤ 30% of entry net premium
+const SL_PREMIUM_MULT    = 2.5;    // v2: exit when cost-to-close ≥ 2.5× entry premium (was: strike cross)
 const VIX_MAX            = 25;     // skip selling when market is too volatile
 const NEUTRAL_EMA_PCT    = 0.0005; // within 0.05% → treat as neutral → Iron Condor
 const EMA_FAST           = 9;
@@ -211,11 +212,9 @@ export class ExpirySpreadBacktestService {
           openTrade = null; continue;
         }
 
-        // SL: underlying has crossed the short strike (momentum against us)
-        const slBreached = this.isSLBreached(openTrade, bar.close);
-        if (slBreached) {
-          const slPrem = this.currentSpreadValue(openTrade, bar.close, barDate);
-          trades.push(this.mkTrade(inst, openTrade, slPrem, barDate, 'SL'));
+        // SL: cost-to-close ≥ 2.5× entry premium (gives the spread breathing room vs v1 strike-cross)
+        if (currentVal >= openTrade.entryPremiumNet * SL_PREMIUM_MULT) {
+          trades.push(this.mkTrade(inst, openTrade, currentVal, barDate, 'SL'));
           openTrade = null; continue;
         }
 
@@ -329,17 +328,6 @@ export class ExpirySpreadBacktestService {
       val += Math.max(0, sc - lc);
     }
     return +val.toFixed(2);
-  }
-
-  // ── SL: underlying has crossed the short strike against position ──────────
-  private isSLBreached(trade: OpenESTrade, spot: number): boolean {
-    if ((trade.direction === 'BULL_PUT' || trade.direction === 'IRON_CONDOR') && trade.shortPutStrike) {
-      if (spot < trade.shortPutStrike) return true;
-    }
-    if ((trade.direction === 'BEAR_CALL' || trade.direction === 'IRON_CONDOR') && trade.shortCallStrike) {
-      if (spot > trade.shortCallStrike) return true;
-    }
-    return false;
   }
 
   private mkTrade(inst: typeof INSTRUMENTS[number], t: OpenESTrade, exitPremNet: number, exitTime: Date, reason: ESTrade['exitReason']): ESTrade {
