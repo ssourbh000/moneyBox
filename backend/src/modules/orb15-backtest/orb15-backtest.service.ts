@@ -9,14 +9,13 @@ import {
   istHHMM, istDayOfWeek, isNewDay,
 } from '../strategies/option-indicators';
 
-// ── Strategy B v2: 45-minute ORB + Multi-Timeframe + Volume ──────────────────
+// ── Strategy B v3: v2 + Afternoon Re-entry Window ────────────────────────────
 //
-//  All v1 filters (ADX > 20, ATR SL, 20% trail) plus:
-//    • 15-min EMA(9)/EMA(21) alignment — multi-timeframe trend confirmation
-//    • Volume surge: entry bar volume > 1.5× 20-bar rolling average
-//    • RSI thresholds tightened: > 60 (bull) / < 40 (bear) on 5-min
-//    • Previous Day High/Low break: price must clear PDH (CALL) or PDL (PUT)
-//    • Gap direction bias: large gaps lock direction (gap-up → CALL only, gap-down → PUT only)
+//  All v2 filters plus:
+//    • Entry window extended 10:00–14:30 (was 14:00) — captures afternoon
+//      momentum continuation where trend often accelerates into close
+//    • Same strict filters apply in the PM window (no relaxation)
+//    • Max trades/day raised to 4 to allow one additional PM entry
 
 const INSTRUMENTS = [
   { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 25, tickSize: 50  },
@@ -30,7 +29,7 @@ const TRAIL_PCT          = 0.20;   // trail SL at 20% below running peak premium
 const PARTIAL_MULT       = 1.8;
 const ORB_BARS           = 9;      // 9 × 5min = 45-min opening range
 const ENTRY_FROM         = 1000;   // entry after ORB is set (10:00 AM)
-const ENTRY_TO           = 1400;
+const ENTRY_TO           = 1430;   // extended to 14:30 for afternoon continuation
 const EXIT_TIME          = 1500;
 const VIX_MAX            = 20;
 const RSI_BULL           = 60;   // tightened from 50 → stronger momentum required
@@ -38,7 +37,7 @@ const RSI_BEAR           = 40;   // tightened from 50 → stronger momentum requ
 const VOL_SURGE          = 1.5;  // entry bar volume must be > 1.5× rolling avg
 const VOL_AVG_BARS       = 20;   // rolling window for volume average
 const GAP_THRESHOLD      = 0.005; // 0.5% gap locks direction for the day
-const MAX_TRADES_PER_DAY = 3;
+const MAX_TRADES_PER_DAY = 4;   // +1 for afternoon window
 const COOLDOWN_MS        = 20 * 60 * 1000;
 const ST_PERIOD          = 10;
 const ST_MULT            = 3;
