@@ -21,6 +21,7 @@ import { ExpirySpreadBacktestModule } from './modules/expiry-spread-backtest/exp
 import { EventAlphaBacktestModule } from './modules/event-alpha-backtest/event-alpha-backtest.module';
 import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
+import { CryptoOrbModule } from './modules/crypto-orb/crypto-orb.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { LiveSignalModule } from './modules/live-signal/live-signal.module';
     EventAlphaBacktestModule,
     PortfolioBacktestModule,
     LiveSignalModule,
+    CryptoOrbModule,
   ],
 })
 export class AppModule {}

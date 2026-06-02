@@ -22,6 +22,23 @@ export class MarketDataService {
     private angelOne: AngelOneAdapterService,
   ) {}
 
+  // ── Intraday data seed: runs every 10 min during market hours ─────────────
+  // 3:30–10:00 UTC = 9:00–15:30 IST; seeds today's 5-min + 15-min + daily bars
+  @Cron('*/10 3-10 * * 1-5')
+  async scheduledIntradaySeed() {
+    const now = new Date();
+    const hhmm = (now.getUTCHours() + 5) * 60 + (now.getUTCMinutes() + 30);
+    if (hhmm < 555 || hhmm > 930) return; // 9:15–15:30 IST only
+    const todayOpen = new Date(now);
+    todayOpen.setUTCHours(3, 45, 0, 0); // 9:15 IST = 3:45 UTC
+    this.logger.log('Intraday seed: fetching today\'s bars from Angel One');
+    try {
+      await this.seedFromAngelOne(todayOpen, now);
+    } catch (err: any) {
+      this.logger.error(`Intraday seed error: ${err.message}`);
+    }
+  }
+
   // ── Instrument master ─────────────────────────────────────────────────────
 
   @Cron(CronExpression.EVERY_DAY_AT_8AM)

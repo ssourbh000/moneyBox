@@ -7,6 +7,9 @@ import { LiveSignalService } from './live-signal.service';
 export class LiveSignalController {
   constructor(private svc: LiveSignalService) {}
 
+  @Get('account')
+  getAccount() { return this.svc.getAccount(); }
+
   @Get('today')
   getToday() { return this.svc.getToday(); }
 

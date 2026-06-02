@@ -68,6 +68,7 @@ export const optionBacktestService = {
 };
 
 export const liveSignalService = {
+  account: () => api.get('/live-signal/account').then((r) => r.data),
   today: () => api.get('/live-signal/today').then((r) => r.data),
   recent: (days = 30) => api.get(`/live-signal/recent?days=${days}`).then((r) => r.data),
   summary: (days = 30) => api.get(`/live-signal/summary?days=${days}`).then((r) => r.data),

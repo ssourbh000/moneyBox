@@ -20,6 +20,13 @@ export class PaperTrade {
   @Prop() netPnl?: number;
   @Prop({ required: true }) vix: number;
   @Prop({ type: Object }) meta: Record<string, any>;
+  // v4 additions
+  @Prop() peakPremium?: number;    // highest premium seen since entry (for trailing SL)
+  @Prop({ default: false }) trailSL: boolean;
+  @Prop({ default: false }) partialBooked: boolean;
+  @Prop() capitalBefore?: number;
+  @Prop() capitalAfter?: number;
+  @Prop() regime?: string;          // NORMAL | HIGH | CRISIS
 }
 
 export const PaperTradeSchema = SchemaFactory.createForClass(PaperTrade);

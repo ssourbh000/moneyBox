@@ -18,6 +18,7 @@ import {
   TrendingDown,
   Activity,
   GitCompare,
+  Bitcoin,
 } from 'lucide-react';
 import { authService } from '@/services/auth.service';
 
@@ -33,6 +34,7 @@ const nav = [
   { href: '/event-alpha-backtest', label: 'D — Event Alpha', icon: Zap },
   { href: '/live-signals', label: 'Live Signals', icon: Activity },
   { href: '/paper-trading', label: 'Paper Trading', icon: FileText },
+  { href: '/crypto-orb', label: 'Crypto ORB', icon: Bitcoin },
   { href: '/live-trading', label: 'Live Trading', icon: Zap },
   { href: '/positions', label: 'Positions', icon: Briefcase },
   { href: '/orders', label: 'Orders', icon: ListOrdered },
