@@ -24,18 +24,45 @@ export class MarketDataService {
 
   // ── Intraday data seed: runs every 10 min during market hours ─────────────
   // 3:30–10:00 UTC = 9:00–15:30 IST; seeds today's 5-min + 15-min + daily bars
-  @Cron('*/10 3-10 * * 1-5')
+  // Focused intraday seed — only NIFTY 50, NIFTY BANK, INDIA VIX (7 calls)
+  // Runs every 5 min so bars stay fresh for the live signal engine
+  @Cron('*/5 3-10 * * 1-5', { timeZone: 'UTC' })
   async scheduledIntradaySeed() {
     const now = new Date();
     const hhmm = (now.getUTCHours() + 5) * 60 + (now.getUTCMinutes() + 30);
     if (hhmm < 555 || hhmm > 930) return; // 9:15–15:30 IST only
+
     const todayOpen = new Date(now);
     todayOpen.setUTCHours(3, 45, 0, 0); // 9:15 IST = 3:45 UTC
-    this.logger.log('Intraday seed: fetching today\'s bars from Angel One');
-    try {
-      await this.seedFromAngelOne(todayOpen, now);
-    } catch (err: any) {
-      this.logger.error(`Intraday seed error: ${err.message}`);
+
+    const PAPER_INSTRUMENTS = [
+      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', intervals: ['FIVE_MINUTE', 'FIFTEEN_MINUTE', 'ONE_DAY'] },
+      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', intervals: ['FIVE_MINUTE', 'FIFTEEN_MINUTE', 'ONE_DAY'] },
+      { symbol: 'INDIA VIX',  exchange: 'NSE', token: '99926017', intervals: ['ONE_DAY'] },
+    ];
+
+    this.logger.log('Intraday seed: NIFTY 50, NIFTY BANK, VIX');
+    for (const inst of PAPER_INSTRUMENTS) {
+      for (const angelInterval of inst.intervals) {
+        const key = `${inst.symbol}:${ANGEL_INTERVAL_MAP[angelInterval]}`;
+        try {
+          const candles = await this.angelOne.getCandles(inst.token, inst.exchange, angelInterval, todayOpen, now);
+          if (candles.length) {
+            const ops = candles.map(c => ({
+              updateOne: {
+                filter: { symbol: inst.symbol, exchange: inst.exchange, interval: ANGEL_INTERVAL_MAP[angelInterval], timestamp: c.timestamp },
+                update: { $set: { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume } },
+                upsert: true,
+              },
+            }));
+            const res = await this.barModel.bulkWrite(ops);
+            this.logger.log(`${key}: fetched=${candles.length} stored=${(res.upsertedCount ?? 0) + (res.modifiedCount ?? 0)}`);
+          }
+        } catch (err: any) {
+          this.logger.error(`Intraday seed failed for ${key}: ${err.message}`);
+        }
+        await new Promise(r => setTimeout(r, 1000)); // 1s between calls — avoids rate limit
+      }
     }
   }
 
