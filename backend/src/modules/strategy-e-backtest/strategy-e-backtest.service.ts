@@ -99,19 +99,44 @@ function atr(bars: any[], period: number): number[] {
 }
 
 function supertrendDir(bars: any[], period = 14, mult = 3): number[] {
+  const n = bars.length;
+  const dirs: number[] = new Array(n).fill(1);
   const atrs = atr(bars, period);
-  const dirs: number[] = new Array(bars.length).fill(1);
-  let ub = 0, lb = 0;
-  for (let i = period; i < bars.length; i++) {
-    if (isNaN(atrs[i])) continue;
-    const mid = (bars[i].high + bars[i].low) / 2;
-    const rawUB = mid + mult * atrs[i];
-    const rawLB = mid - mult * atrs[i];
-    ub = rawUB < ub || bars[i - 1].close > ub ? rawUB : ub;
-    lb = rawLB > lb || bars[i - 1].close < lb ? rawLB : lb;
-    if (bars[i].close > ub) dirs[i] = 1;
-    else if (bars[i].close < lb) dirs[i] = -1;
-    else dirs[i] = dirs[i - 1];
+
+  let prevUpperFinal = NaN, prevLowerFinal = NaN, prevST = NaN;
+
+  for (let i = period; i < n; i++) {
+    const a = atrs[i];
+    if (isNaN(a)) { if (i > 0) dirs[i] = dirs[i - 1]; continue; }
+
+    const hl2 = (bars[i].high + bars[i].low) / 2;
+    const basicUpper = hl2 + mult * a;
+    const basicLower = hl2 - mult * a;
+
+    let upperFinal: number, lowerFinal: number;
+
+    if (isNaN(prevST)) {
+      // seed the first values
+      upperFinal = basicUpper;
+      lowerFinal = basicLower;
+      dirs[i] = bars[i].close > basicLower ? 1 : -1;
+    } else {
+      // tighten bands: upper can only move down, lower can only move up
+      upperFinal = (basicUpper < prevUpperFinal || bars[i - 1].close > prevUpperFinal) ? basicUpper : prevUpperFinal;
+      lowerFinal = (basicLower > prevLowerFinal || bars[i - 1].close < prevLowerFinal) ? basicLower : prevLowerFinal;
+
+      if (prevST === prevUpperFinal) {
+        // was bearish: flip to bullish if price > upper band
+        dirs[i] = bars[i].close > upperFinal ? 1 : -1;
+      } else {
+        // was bullish: flip to bearish if price < lower band
+        dirs[i] = bars[i].close < lowerFinal ? -1 : 1;
+      }
+    }
+
+    prevUpperFinal = upperFinal;
+    prevLowerFinal = lowerFinal;
+    prevST = dirs[i] === -1 ? upperFinal : lowerFinal;
   }
   return dirs;
 }
@@ -251,6 +276,37 @@ function computeMetrics(trades: SEBTrade[], initialCapital = 100_000): SEBMetric
   };
 }
 
+// ── Build synthetic 15-min bars from 5-min ───────────────────────────────────
+function build15mFromBars(bars5: any[]): any[] {
+  // Group 5-min bars into 15-min buckets: 9:15, 9:30, 9:45, ...
+  // Bucket key = floor(hhmm / 15) * 15 in IST minutes-since-midnight
+  const buckets = new Map<string, any[]>();
+  for (const b of bars5) {
+    const istMs = b.timestamp.getTime() + 330 * 60_000;
+    const d = new Date(istMs);
+    const mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+    const bucketMins = Math.floor(mins / 15) * 15;
+    const dateStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    const key = `${dateStr}:${bucketMins}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(b);
+  }
+  const result: any[] = [];
+  for (const [, brs] of buckets) {
+    if (brs.length === 0) continue;
+    brs.sort((a, b) => a.timestamp - b.timestamp);
+    result.push({
+      timestamp: brs[0].timestamp, // open time of the bucket
+      open: brs[0].open,
+      high: Math.max(...brs.map(b => b.high)),
+      low: Math.min(...brs.map(b => b.low)),
+      close: brs[brs.length - 1].close,
+      volume: brs.reduce((s, b) => s + (b.volume || 0), 0),
+    });
+  }
+  return result.sort((a, b) => a.timestamp - b.timestamp);
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -265,11 +321,12 @@ export class StrategyEBacktestService {
     // Load extra 20 days before fromDate to seed indicators
     const seedFrom = new Date(fromDate.getTime() - 20 * 86_400_000);
 
-    const [bars5m, bars15m, vixBars] = await Promise.all([
+    const [bars5m, vixBars] = await Promise.all([
       this.barModel.find({ symbol: 'NIFTY 50', exchange: 'NSE', interval: '5minute', timestamp: { $gte: seedFrom, $lte: toDate } }).sort({ timestamp: 1 }).lean(),
-      this.barModel.find({ symbol: 'NIFTY 50', exchange: 'NSE', interval: '15minute', timestamp: { $gte: seedFrom, $lte: toDate } }).sort({ timestamp: 1 }).lean(),
       this.barModel.find({ symbol: 'INDIA VIX', exchange: 'NSE', interval: 'day', timestamp: { $gte: seedFrom, $lte: toDate } }).sort({ timestamp: 1 }).lean(),
     ]);
+    // Build synthetic 15-min bars from 5-min (3 bars per 15-min candle) for Supertrend
+    const bars15m = build15mFromBars(bars5m);
 
     // VIX lookup: day key → close
     const vixMap = new Map<string, number>();
@@ -463,9 +520,11 @@ export class StrategyEBacktestService {
         if (dir === 'CALL' && emaVals.e9 <= emaVals.e21) continue;
         if (dir === 'PUT' && emaVals.e9 >= emaVals.e21) continue;
 
-        // RSI filter: 35-65 (momentum zone, not exhausted)
+        // RSI filter: exclude extreme exhaustion only (>75 for CALL, <25 for PUT)
         const rsiVal = rsi5mByTs.get(fiveBar.timestamp.getTime());
-        if (!rsiVal || isNaN(rsiVal) || rsiVal < 35 || rsiVal > 65) continue;
+        if (rsiVal == null || isNaN(rsiVal)) continue;
+        if (dir === 'CALL' && rsiVal > 75) continue;
+        if (dir === 'PUT' && rsiVal < 25) continue;
 
         const spot = fiveBar.close;
         const tEntry = tFromTimestamp(fiveBar.timestamp);
