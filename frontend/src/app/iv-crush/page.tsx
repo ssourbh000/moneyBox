@@ -149,7 +149,7 @@ export default function IVCrushPage() {
 
   const closed = recent.filter(t => t.status === 'CLOSED');
 
-  const active = isEngineActive(lastTick, 'status');
+  const active = isEngineActive(lastTick, 'status', 920, 1000);
 
   return (
     <AppShell mainClassName={active ? 'bg-emerald-950/40' : 'bg-gray-950/60'}>

@@ -223,7 +223,7 @@ export default function PaperTradingPage() {
   const open   = trades.filter(t => t.status === 'OPEN');
   const closed = trades.filter(t => t.status === 'CLOSED');
 
-  const active = isEngineActive(lastTick, 'results');
+  const active = isEngineActive(lastTick, 'results', 1000, 1500);
 
   return (
     <AppShell mainClassName={active ? 'bg-emerald-950/40' : 'bg-gray-950/60'}>

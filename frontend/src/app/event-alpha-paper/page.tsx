@@ -163,7 +163,7 @@ export default function EventAlphaPaperPage() {
 
   const closed = recent.filter(t => t.status === 'CLOSED');
 
-  const active = isEngineActive(lastTick, 'status');
+  const active = isEngineActive(lastTick, 'status', 920, 1430);
 
   return (
     <AppShell mainClassName={active ? 'bg-emerald-950/40' : 'bg-gray-950/60'}>
