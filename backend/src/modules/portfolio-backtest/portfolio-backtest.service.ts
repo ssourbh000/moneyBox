@@ -3,10 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PortfolioRun, PortfolioRunDocument, PFStatus } from './schemas/portfolio-backtest-run.schema';
 import { Orb15BacktestService } from '../orb15-backtest/orb15-backtest.service';
-import { ExpirySpreadBacktestService } from '../expiry-spread-backtest/expiry-spread-backtest.service';
 import { EventAlphaBacktestService } from '../event-alpha-backtest/event-alpha-backtest.service';
 
-type Strategy = 'ORB' | 'SPREAD' | 'EVENT';
+type Strategy = 'ORB' | 'EVENT';
 
 interface PortfolioTrade {
   _strategy: Strategy;
@@ -33,7 +32,6 @@ export class PortfolioBacktestService {
   constructor(
     @InjectModel(PortfolioRun.name) private runModel: Model<PortfolioRunDocument>,
     private orbSvc: Orb15BacktestService,
-    private spreadSvc: ExpirySpreadBacktestService,
     private eventSvc: EventAlphaBacktestService,
   ) {}
 
@@ -52,28 +50,26 @@ export class PortfolioBacktestService {
   private async execute(runId: string, fromDate: string, toDate: string, startingCapital: number) {
     await this.runModel.findByIdAndUpdate(runId, { status: PFStatus.RUNNING });
     try {
-      this.logger.log(`Portfolio backtest ${runId}: running all 3 strategies…`);
+      this.logger.log(`Portfolio backtest ${runId}: running B + D strategies…`);
 
-      const [orbTrades, spreadTrades, eventTrades] = await Promise.all([
+      const [orbTrades, eventTrades] = await Promise.all([
         this.orbSvc.simulateTrades(fromDate, toDate),
-        this.spreadSvc.simulateTrades(fromDate, toDate),
         this.eventSvc.simulateTrades(fromDate, toDate),
       ]);
 
-      this.logger.log(`ORB: ${orbTrades.length} | Spread: ${spreadTrades.length} | Event: ${eventTrades.length}`);
+      this.logger.log(`ORB: ${orbTrades.length} | Event: ${eventTrades.length}`);
 
       const allTrades: PortfolioTrade[] = [
         ...orbTrades,
-        ...spreadTrades,
         ...eventTrades,
       ].sort((a, b) => a.exitTime.localeCompare(b.exitTime));
 
-      const metrics = this.computePortfolioMetrics(allTrades, orbTrades, spreadTrades, eventTrades, startingCapital);
+      const metrics = this.computePortfolioMetrics(allTrades, orbTrades, eventTrades, startingCapital);
 
       await this.runModel.findByIdAndUpdate(runId, {
         status: PFStatus.COMPLETED,
         metrics,
-        trades: allTrades.slice(-500), // store last 500 trades to keep doc size manageable
+        trades: allTrades.slice(-500),
       });
     } catch (err: any) {
       this.logger.error(`Portfolio ${runId} failed: ${err.message}`);
@@ -84,7 +80,6 @@ export class PortfolioBacktestService {
   private computePortfolioMetrics(
     all: PortfolioTrade[],
     orb: PortfolioTrade[],
-    spread: PortfolioTrade[],
     event: PortfolioTrade[],
     startCap: number,
   ) {
@@ -108,23 +103,21 @@ export class PortfolioBacktestService {
     const sharpe = dr.length > 1 ? +(mean(dr) / (stdDev(dr) || 1e-10) * Math.sqrt(252)).toFixed(2) : 0;
 
     // ── Monthly breakdown ────────────────────────────────────────────────────
-    const monthly = new Map<string, { orb: number; spread: number; event: number; total: number; orbN: number; spreadN: number; eventN: number }>();
+    const monthly = new Map<string, { orb: number; event: number; total: number; orbN: number; eventN: number }>();
     for (const t of all) {
       const mo = t.exitTime.slice(0, 7);
-      if (!monthly.has(mo)) monthly.set(mo, { orb: 0, spread: 0, event: 0, total: 0, orbN: 0, spreadN: 0, eventN: 0 });
+      if (!monthly.has(mo)) monthly.set(mo, { orb: 0, event: 0, total: 0, orbN: 0, eventN: 0 });
       const row = monthly.get(mo)!;
       row.total += t.netPnl;
-      if (t._strategy === 'ORB')    { row.orb    += t.netPnl; row.orbN++; }
-      if (t._strategy === 'SPREAD') { row.spread  += t.netPnl; row.spreadN++; }
-      if (t._strategy === 'EVENT')  { row.event   += t.netPnl; row.eventN++; }
+      if (t._strategy === 'ORB')   { row.orb   += t.netPnl; row.orbN++; }
+      if (t._strategy === 'EVENT') { row.event  += t.netPnl; row.eventN++; }
     }
     const monthlyBreakdown = [...monthly.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([mo, v]) => ({
       month: mo,
-      orb:    +v.orb.toFixed(2),
-      spread: +v.spread.toFixed(2),
-      event:  +v.event.toFixed(2),
-      total:  +v.total.toFixed(2),
-      orbN: v.orbN, spreadN: v.spreadN, eventN: v.eventN,
+      orb:   +v.orb.toFixed(2),
+      event: +v.event.toFixed(2),
+      total: +v.total.toFixed(2),
+      orbN: v.orbN, eventN: v.eventN,
     }));
 
     // ── Per-strategy stats ───────────────────────────────────────────────────
@@ -140,29 +133,27 @@ export class PortfolioBacktestService {
         avgWin: wins.length ? +(gp / wins.length).toFixed(2) : 0,
         avgLoss: losses.length ? +(gl / losses.length).toFixed(2) : 0,
         profitFactor: gl > 0 ? +(gp / gl).toFixed(2) : 99,
-        contribution: 0, // filled below
+        contribution: 0,
       };
     };
 
-    const orbStats    = stratStats(orb as PortfolioTrade[], 'ORB');
-    const spreadStats = stratStats(spread as PortfolioTrade[], 'SPREAD');
-    const eventStats  = stratStats(event as PortfolioTrade[], 'EVENT');
-    const totalNetPnl = orbStats.netPnl + spreadStats.netPnl + eventStats.netPnl;
+    const orbStats   = stratStats(orb as PortfolioTrade[], 'ORB');
+    const eventStats = stratStats(event as PortfolioTrade[], 'EVENT');
+    const totalNetPnl = orbStats.netPnl + eventStats.netPnl;
 
     if (totalNetPnl !== 0) {
-      orbStats.contribution    = +(orbStats.netPnl    / totalNetPnl * 100).toFixed(1);
-      spreadStats.contribution = +(spreadStats.netPnl / totalNetPnl * 100).toFixed(1);
-      eventStats.contribution  = +(eventStats.netPnl  / totalNetPnl * 100).toFixed(1);
+      orbStats.contribution   = +(orbStats.netPnl  / totalNetPnl * 100).toFixed(1);
+      eventStats.contribution = +(eventStats.netPnl / totalNetPnl * 100).toFixed(1);
     }
 
     // ── Combined top-level metrics ───────────────────────────────────────────
     const wins = all.filter(t => t.netPnl > 0), losses = all.filter(t => t.netPnl <= 0);
     const gp = wins.reduce((s, t) => s + t.netPnl, 0);
     const gl = Math.abs(losses.reduce((s, t) => s + t.netPnl, 0));
-    const winningMonths  = monthlyBreakdown.filter(m => m.total > 0).length;
-    const losingMonths   = monthlyBreakdown.filter(m => m.total <= 0).length;
-    const bestMonth      = monthlyBreakdown.reduce((best, m) => m.total > best.total ? m : best, { month: '', total: -Infinity });
-    const worstMonth     = monthlyBreakdown.reduce((worst, m) => m.total < worst.total ? m : worst, { month: '', total: Infinity });
+    const winningMonths = monthlyBreakdown.filter(m => m.total > 0).length;
+    const losingMonths  = monthlyBreakdown.filter(m => m.total <= 0).length;
+    const bestMonth  = monthlyBreakdown.reduce((best, m) => m.total > best.total ? m : best, { month: '', total: -Infinity });
+    const worstMonth = monthlyBreakdown.reduce((worst, m) => m.total < worst.total ? m : worst, { month: '', total: Infinity });
 
     return {
       totalTrades: all.length,
@@ -180,12 +171,10 @@ export class PortfolioBacktestService {
       roi: +(((gp - gl) / startCap) * 100).toFixed(2),
       finalCapital: +(startCap + (gp - gl)).toFixed(2),
       startingCapital: startCap,
-      // Monthly
       winningMonths, losingMonths,
       bestMonth:  { month: bestMonth.month,  pnl: +bestMonth.total.toFixed(2) },
       worstMonth: { month: worstMonth.month, pnl: +worstMonth.total.toFixed(2) },
-      // Per strategy
-      strategyStats: [orbStats, spreadStats, eventStats],
+      strategyStats: [orbStats, eventStats],
       monthlyBreakdown,
       equityCurve,
     };

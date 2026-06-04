@@ -50,23 +50,6 @@ export interface SeedResult {
   error?: string;
 }
 
-export const optionBacktestService = {
-  seed: (fromDate: string, toDate: string) =>
-    api.post<SeedResult[]>('/market-data/seed-index', { fromDate, toDate }).then((r) => r.data),
-
-  seedAngel: (fromDate: string, toDate: string) =>
-    api.post<SeedResult[]>('/market-data/seed-angel', { fromDate, toDate }).then((r) => r.data),
-
-  run: (fromDate: string, toDate: string) =>
-    api.post<OBRun>('/option-backtest/run', { fromDate, toDate }).then((r) => r.data),
-
-  list: () =>
-    api.get<OBRun[]>('/option-backtest/list').then((r) => r.data),
-
-  get: (id: string) =>
-    api.get<OBRun>(`/option-backtest/${id}`).then((r) => r.data),
-};
-
 export const liveSignalService = {
   account:   () => api.get('/live-signal/account').then((r) => r.data),
   today:     () => api.get('/live-signal/today').then((r) => r.data),

@@ -11,20 +11,20 @@ import type { OBRun, OBMetrics } from '@/services/option-backtest.service';
 
 const STRATEGIES = [
   {
-    key:      'original',
-    label:    'Original',
-    subtitle: 'ORB + ST Flip · 9:30–10:30 · VIX≤18 · 1 trade/day',
-    endpoint: 'option-backtest',
-    color:    'border-gray-500',
-    badge:    'bg-gray-700 text-gray-300',
-  },
-  {
     key:      'orb15',
     label:    'B — 45-min ORB',
     subtitle: '45-min range · EMA direction · 10:00–14:00 · 3/day',
     endpoint: 'orb15-backtest',
     color:    'border-purple-500',
     badge:    'bg-purple-900 text-purple-300',
+  },
+  {
+    key:      'event-alpha',
+    label:    'D — Event Alpha',
+    subtitle: 'ATM straddle · VIX/gap events · 9:20–14:30 · 1/day',
+    endpoint: 'event-alpha-backtest',
+    color:    'border-yellow-500',
+    badge:    'bg-yellow-900 text-yellow-300',
   },
 ] as const;
 
@@ -139,7 +139,7 @@ export default function StrategyComparePage() {
     .filter(s => states[s.key].run?.metrics)
     .map(s => ({ key: s.key, m: states[s.key].run!.metrics as OBMetrics }));
 
-  const baseMetrics = completedRows.find(r => r.key === 'original')?.m;
+  const baseMetrics = completedRows.find(r => r.key === 'orb15')?.m;
 
   // Best-in-class per column
   const bestTrades  = getBest(completedRows, 'totalTrades', true);
@@ -164,7 +164,7 @@ export default function StrategyComparePage() {
     const ddScore   = maxDD > 0 ? (1 - m.maxDrawdown / maxDD) * 5 : 5;
     return { key: r.key, score: +(tScore + wrScore + pfScore + shScore + roiScore + ddScore).toFixed(1) };
   });
-  const topScore = scores.reduce((b, s) => s.score > b.score ? s : b, { key: 'original' as StrategyKey, score: -Infinity });
+  const topScore = scores.reduce((b, s) => s.score > b.score ? s : b, { key: 'orb15' as StrategyKey, score: -Infinity });
 
   const overlayEquity = overlayKey
     ? states[overlayKey].run?.metrics?.equityCurve
@@ -179,7 +179,7 @@ export default function StrategyComparePage() {
           <BarChart2 size={24} className="text-indigo-400" />
           <div>
             <h1 className="text-xl font-bold text-white">Strategy Comparison</h1>
-            <p className="text-sm text-gray-400">Run all 6 strategies on the same data — pick the winner</p>
+            <p className="text-sm text-gray-400">Run B and D strategies on the same data — pick the winner</p>
           </div>
         </div>
 
@@ -201,7 +201,7 @@ export default function StrategyComparePage() {
             className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-sm font-semibold"
           >
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-            {running ? 'Running…' : 'Run Both Strategies'}
+            {running ? 'Running…' : 'Run B & D'}
           </button>
           {completedCount > 0 && (
             <span className="text-sm text-gray-400 self-center">{completedCount} / {STRATEGIES.length} completed</span>
@@ -282,7 +282,7 @@ export default function StrategyComparePage() {
                       return (
                         <td key={s.key} className={`py-2 px-3 text-sm ${isTop ? 'text-green-300 font-bold' : 'text-white'}`}>
                           {val !== undefined ? row.fmt(val) : <span className="text-gray-600">—</span>}
-                          {s.key !== 'original' && val !== undefined && baseMetrics?.[row.field] !== undefined && (
+                          {s.key !== 'orb15' && val !== undefined && baseMetrics?.[row.field] !== undefined && (
                             <DeltaBadge base={baseMetrics[row.field] as number} value={val} />
                           )}
                         </td>
@@ -350,7 +350,7 @@ export default function StrategyComparePage() {
         )}
 
         {/* Winner recommendation */}
-        {allDone && topScore.key !== 'original' && (
+        {allDone && (
           <div className="bg-gray-800 border border-yellow-500 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <Trophy size={18} className="text-yellow-400" />

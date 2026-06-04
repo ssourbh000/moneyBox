@@ -11,19 +11,16 @@ const TWO_YEARS_AGO = new Date(Date.now() - 2 * 365 * 86_400_000).toISOString().
 const TODAY         = new Date().toISOString().slice(0, 10);
 
 const STRATEGY_COLOR: Record<string, string> = {
-  ORB:    'text-purple-400',
-  SPREAD: 'text-amber-400',
-  EVENT:  'text-yellow-400',
+  ORB:   'text-purple-400',
+  EVENT: 'text-yellow-400',
 };
 const STRATEGY_BG: Record<string, string> = {
-  ORB:    'bg-purple-900 text-purple-200',
-  SPREAD: 'bg-amber-900 text-amber-200',
-  EVENT:  'bg-yellow-900 text-yellow-200',
+  ORB:   'bg-purple-900 text-purple-200',
+  EVENT: 'bg-yellow-900 text-yellow-200',
 };
 const STRATEGY_LABEL: Record<string, string> = {
-  ORB:    'B — ORB Breakout',
-  SPREAD: 'C — Expiry Spread',
-  EVENT:  'D — Event Alpha',
+  ORB:   'B — ORB Breakout',
+  EVENT: 'D — Event Alpha',
 };
 
 function pnlColor(v: number) { return v >= 0 ? 'text-green-400' : 'text-red-400'; }
@@ -82,7 +79,7 @@ function StrategyTable({ stats }: { stats: StrategyStats[] }) {
                 <div className="flex items-center gap-2">
                   <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${s.strategy === 'ORB' ? 'bg-purple-500' : s.strategy === 'SPREAD' ? 'bg-amber-500' : 'bg-yellow-500'}`}
+                      className={`h-full rounded-full ${s.strategy === 'ORB' ? 'bg-purple-500' : 'bg-yellow-500'}`}
                       style={{ width: `${Math.min(100, Math.max(0, s.contribution))}%` }}
                     />
                   </div>
@@ -107,7 +104,6 @@ function MonthlyTable({ rows }: { rows: MonthlyRow[] }) {
           <tr className="text-xs text-gray-500 border-b border-gray-700">
             <th className="py-2 px-3">Month</th>
             <th className="py-2 px-3 text-purple-400">ORB</th>
-            <th className="py-2 px-3 text-amber-400">Spread</th>
             <th className="py-2 px-3 text-yellow-400">Event</th>
             <th className="py-2 px-3 text-white">Total</th>
             <th className="py-2 px-3">Trades</th>
@@ -120,10 +116,9 @@ function MonthlyTable({ rows }: { rows: MonthlyRow[] }) {
               <tr key={r.month} className={`border-b border-gray-700 ${isGoodMonth ? '' : 'opacity-70'}`}>
                 <td className="py-2 px-3 text-gray-400 font-medium">{r.month}</td>
                 <td className={`py-2 px-3 ${pnlColor(r.orb)}`}>{r.orbN > 0 ? fmt(r.orb) : '—'}</td>
-                <td className={`py-2 px-3 ${pnlColor(r.spread)}`}>{r.spreadN > 0 ? fmt(r.spread) : '—'}</td>
                 <td className={`py-2 px-3 ${pnlColor(r.event)}`}>{r.eventN > 0 ? fmt(r.event) : '—'}</td>
                 <td className={`py-2 px-3 font-bold ${pnlColor(r.total)}`}>{fmt(r.total)}</td>
-                <td className="py-2 px-3 text-gray-500 text-xs">{r.orbN + r.spreadN + r.eventN}</td>
+                <td className="py-2 px-3 text-gray-500 text-xs">{r.orbN + r.eventN}</td>
               </tr>
             );
           })}
@@ -150,7 +145,7 @@ export default function PortfolioBacktestPage() {
 
   const handleRun = async () => {
     setLoading(true);
-    setStatus('Queued — running all 3 strategies simultaneously…');
+    setStatus('Queued — running B + D strategies simultaneously…');
     try {
       const run = await portfolioBacktestService.run(fromDate, toDate, parseInt(capital) || 100_000);
       const poll = setInterval(async () => {
@@ -163,7 +158,7 @@ export default function PortfolioBacktestPage() {
             await loadRuns();
             setSelected(updated);
           } else {
-            setStatus('Running ORB + Spread + Event in parallel…');
+            setStatus('Running ORB + Event in parallel…');
           }
         } catch { clearInterval(poll); setLoading(false); }
       }, 5000);
@@ -183,9 +178,9 @@ export default function PortfolioBacktestPage() {
         <div className="flex items-center gap-3">
           <BarChart2 size={24} className="text-emerald-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">Portfolio Simulator — All 3 Strategies</h1>
+            <h1 className="text-xl font-bold text-white">Portfolio Simulator — B + D</h1>
             <p className="text-sm text-gray-400">
-              Runs B (ORB) + C (Expiry Spread) + D (Event Alpha) together on shared capital
+              Runs B (ORB) + D (Event Alpha) together on shared capital
             </p>
           </div>
         </div>
@@ -193,7 +188,6 @@ export default function PortfolioBacktestPage() {
         {/* Strategy legend */}
         <div className="bg-gray-800 rounded-lg p-3 flex flex-wrap gap-3 text-xs">
           <span className="bg-purple-900 text-purple-300 px-2 py-0.5 rounded">B — ORB Breakout (daily)</span>
-          <span className="bg-amber-900 text-amber-300 px-2 py-0.5 rounded">C — Expiry Spread (weekly)</span>
           <span className="bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded">D — Event Alpha (monthly)</span>
           <span className="ml-auto text-gray-500">Non-overlapping — each strategy fills a different market regime</span>
         </div>

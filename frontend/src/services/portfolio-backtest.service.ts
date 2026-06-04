@@ -12,7 +12,7 @@ export interface PortfolioRun {
 }
 
 export interface StrategyStats {
-  strategy: 'ORB' | 'SPREAD' | 'EVENT';
+  strategy: 'ORB' | 'EVENT';
   trades: number;
   winRate: number;
   netPnl: number;
@@ -25,11 +25,9 @@ export interface StrategyStats {
 export interface MonthlyRow {
   month: string;
   orb: number;
-  spread: number;
   event: number;
   total: number;
   orbN: number;
-  spreadN: number;
   eventN: number;
 }
 

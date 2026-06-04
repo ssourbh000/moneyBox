@@ -152,7 +152,7 @@ export default function EventAlphaBacktestPage() {
   };
 
   const m = selected?.metrics;
-  const tradeList: EATrade[] = selected?.trades ?? [];
+  const tradeList: EATrade[] = (selected?.trades as unknown as EATrade[]) ?? [];
 
   const byReason  = tradeList.reduce<Record<string, number>>((acc, t) => { acc[t.exitReason] = (acc[t.exitReason] ?? 0) + 1; return acc; }, {});
   const byEvent   = tradeList.reduce<Record<string, number>>((acc, t) => { acc[t.eventType] = (acc[t.eventType] ?? 0) + 1; return acc; }, {});

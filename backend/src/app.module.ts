@@ -15,14 +15,10 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { RiskModule } from './modules/risk/risk.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
-import { OptionBacktestModule } from './modules/option-backtest/option-backtest.module';
 import { Orb15BacktestModule } from './modules/orb15-backtest/orb15-backtest.module';
-import { ExpirySpreadBacktestModule } from './modules/expiry-spread-backtest/expiry-spread-backtest.module';
 import { EventAlphaBacktestModule } from './modules/event-alpha-backtest/event-alpha-backtest.module';
 import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
-import { CryptoOrbModule } from './modules/crypto-orb/crypto-orb.module';
-import { StrategyEBacktestModule } from './modules/strategy-e-backtest/strategy-e-backtest.module';
 import { IVCrushModule } from './modules/iv-crush/iv-crush.module';
 
 @Module({
@@ -50,14 +46,10 @@ import { IVCrushModule } from './modules/iv-crush/iv-crush.module';
     RiskModule,
     ReportsModule,
     AuditModule,
-    OptionBacktestModule,
     Orb15BacktestModule,
-    ExpirySpreadBacktestModule,
     EventAlphaBacktestModule,
     PortfolioBacktestModule,
     LiveSignalModule,
-    CryptoOrbModule,
-    StrategyEBacktestModule,
     IVCrushModule,
   ],
 })
