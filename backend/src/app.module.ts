@@ -22,6 +22,7 @@ import { EventAlphaBacktestModule } from './modules/event-alpha-backtest/event-a
 import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 import { CryptoOrbModule } from './modules/crypto-orb/crypto-orb.module';
+import { StrategyEBacktestModule } from './modules/strategy-e-backtest/strategy-e-backtest.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { CryptoOrbModule } from './modules/crypto-orb/crypto-orb.module';
     PortfolioBacktestModule,
     LiveSignalModule,
     CryptoOrbModule,
+    StrategyEBacktestModule,
   ],
 })
 export class AppModule {}

@@ -32,6 +32,7 @@ const nav = [
   { href: '/orb15-backtest', label: 'B — 45-min ORB', icon: CandlestickChart },
   { href: '/expiry-spread-backtest', label: 'C — Expiry Spread', icon: TrendingDown },
   { href: '/event-alpha-backtest', label: 'D — Event Alpha', icon: Zap },
+  { href: '/strategy-e-backtest', label: 'E — Intraday Alpha', icon: Zap },
   { href: '/live-signals', label: 'Live Signals', icon: Activity },
   { href: '/paper-trading', label: 'Paper Trading', icon: FileText },
   { href: '/crypto-orb', label: 'Crypto ORB', icon: Bitcoin },
