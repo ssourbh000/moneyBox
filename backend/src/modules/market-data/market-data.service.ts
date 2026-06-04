@@ -35,34 +35,38 @@ export class MarketDataService {
     const todayOpen = new Date(now);
     todayOpen.setUTCHours(3, 45, 0, 0); // 9:15 IST = 3:45 UTC
 
-    const PAPER_INSTRUMENTS = [
-      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', intervals: ['FIVE_MINUTE', 'FIFTEEN_MINUTE', 'ONE_DAY'] },
-      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', intervals: ['FIVE_MINUTE', 'FIFTEEN_MINUTE', 'ONE_DAY'] },
-      { symbol: 'INDIA VIX',  exchange: 'NSE', token: '99926017', intervals: ['ONE_DAY'] },
+    // Priority order: 5-min for BOTH instruments first, then 15-min, then daily.
+    // This ensures even under rate limiting the most critical bars are always seeded.
+    const SEED_TASKS: { symbol: string; exchange: string; token: string; angelInterval: string }[] = [
+      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', angelInterval: 'FIVE_MINUTE' },
+      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', angelInterval: 'FIVE_MINUTE' },
+      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', angelInterval: 'FIFTEEN_MINUTE' },
+      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', angelInterval: 'FIFTEEN_MINUTE' },
+      { symbol: 'NIFTY 50',   exchange: 'NSE', token: '99926000', angelInterval: 'ONE_DAY' },
+      { symbol: 'NIFTY BANK', exchange: 'NSE', token: '99926009', angelInterval: 'ONE_DAY' },
+      { symbol: 'INDIA VIX',  exchange: 'NSE', token: '99926017', angelInterval: 'ONE_DAY' },
     ];
 
-    this.logger.log('Intraday seed: NIFTY 50, NIFTY BANK, VIX');
-    for (const inst of PAPER_INSTRUMENTS) {
-      for (const angelInterval of inst.intervals) {
-        const key = `${inst.symbol}:${ANGEL_INTERVAL_MAP[angelInterval]}`;
-        try {
-          const candles = await this.angelOne.getCandles(inst.token, inst.exchange, angelInterval, todayOpen, now);
-          if (candles.length) {
-            const ops = candles.map(c => ({
-              updateOne: {
-                filter: { symbol: inst.symbol, exchange: inst.exchange, interval: ANGEL_INTERVAL_MAP[angelInterval], timestamp: c.timestamp },
-                update: { $set: { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume } },
-                upsert: true,
-              },
-            }));
-            const res = await this.barModel.bulkWrite(ops);
-            this.logger.log(`${key}: fetched=${candles.length} stored=${(res.upsertedCount ?? 0) + (res.modifiedCount ?? 0)}`);
-          }
-        } catch (err: any) {
-          this.logger.error(`Intraday seed failed for ${key}: ${err.message}`);
+    this.logger.log('Intraday seed: NIFTY 50 5m, NIFTY BANK 5m, then 15m, day, VIX');
+    for (const task of SEED_TASKS) {
+      const key = `${task.symbol}:${ANGEL_INTERVAL_MAP[task.angelInterval]}`;
+      try {
+        const candles = await this.angelOne.getCandles(task.token, task.exchange, task.angelInterval, todayOpen, now);
+        if (candles.length) {
+          const ops = candles.map(c => ({
+            updateOne: {
+              filter: { symbol: task.symbol, exchange: task.exchange, interval: ANGEL_INTERVAL_MAP[task.angelInterval], timestamp: c.timestamp },
+              update: { $set: { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume } },
+              upsert: true,
+            },
+          }));
+          const res = await this.barModel.bulkWrite(ops);
+          this.logger.log(`${key}: fetched=${candles.length} stored=${(res.upsertedCount ?? 0) + (res.modifiedCount ?? 0)}`);
         }
-        await new Promise(r => setTimeout(r, 1000)); // 1s between calls — avoids rate limit
+      } catch (err: any) {
+        this.logger.error(`Intraday seed failed for ${key}: ${err.message}`);
       }
+      await new Promise(r => setTimeout(r, 1000)); // 1s between calls — avoids rate limit
     }
   }
 

@@ -91,6 +91,12 @@ export class MarketDataController {
     return this.marketDataService.seedFromAngelOne(new Date(body.fromDate), new Date(body.toDate));
   }
 
+  @Post('force-intraday-seed')
+  async forceIntradaySeed() {
+    await this.marketDataService.scheduledIntradaySeed();
+    return { triggered: true, time: new Date().toISOString() };
+  }
+
   @Post('candles/bulk-fetch')
   async bulkFetch(@CurrentUser() user: any, @Body() dto: BulkFetchDto) {
     const accessToken = await this.brokerService.getValidAccessToken(user._id.toString());
