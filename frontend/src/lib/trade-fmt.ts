@@ -58,16 +58,13 @@ function isISTWeekday(): boolean {
 export function isEngineActive(
   tick: { time: string; status?: string; results?: string[] } | null,
   mode: 'status' | 'results',
-  windowStart?: number,
-  windowEnd?: number,
+  activeFrom?: number,  // HHMM when active indicator turns on (e.g. 845 = 8:45 AM)
+  windowEnd?: number,   // HHMM when active indicator turns off (e.g. 1000 = 10:00 AM)
 ): boolean {
-  // Time-based check — show active 30 min before window opens
-  if (windowStart !== undefined && windowEnd !== undefined && isISTWeekday()) {
-    const hhmm    = istNowHHMM();
-    const preFrom = toMins(windowStart) - 30; // 30 min before window
-    const current = toMins(hhmm);
-    const end     = toMins(windowEnd);
-    if (current >= preFrom && current <= end) return true;
+  // Time-based check — show active from activeFrom until windowEnd on weekdays
+  if (activeFrom !== undefined && windowEnd !== undefined && isISTWeekday()) {
+    const current = toMins(istNowHHMM());
+    if (current >= toMins(activeFrom) && current <= toMins(windowEnd)) return true;
   }
 
   // Tick-based check — fallback for when cron has fired
