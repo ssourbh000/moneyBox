@@ -58,6 +58,7 @@ const BROKERAGE          = 40;   // per lot
 @Injectable()
 export class LiveSignalService {
   private readonly logger = new Logger(LiveSignalService.name);
+  private lastTick: { time: string; vix: number; regime: string; results: string[] } | null = null;
 
   constructor(
     @InjectModel(PaperTrade.name) private paperModel: Model<PaperTradeDocument>,
@@ -75,19 +76,32 @@ export class LiveSignalService {
     const vixFrom = new Date(Date.now() - 3 * 86_400_000);
     const vixBars = await this.marketData.getCandles('INDIA VIX', 'NSE', 'day', vixFrom, new Date());
     const vix = vixBars.length ? vixBars[vixBars.length - 1].close : 15;
+    const regime = vix <= VIX_NORMAL_MAX ? 'NORMAL' : vix <= VIX_HIGH_MAX ? 'HIGH' : 'CRISIS';
 
+    const results: string[] = [];
     for (const inst of INSTRUMENTS) {
       try {
-        await this.processInstrument(inst, vix);
+        const msg = await this.processInstrument(inst, vix);
+        results.push(msg);
       } catch (err) {
         this.logger.error(`${inst.symbol} tick error: ${err}`);
+        results.push(`${inst.symbol}: error — ${err}`);
       }
     }
+    this.lastTick = { time: new Date().toISOString(), vix: +vix.toFixed(1), regime, results };
   }
+
+  async forceTick() {
+    await this.tick();
+    return this.lastTick;
+  }
+
+  getLastTick() { return this.lastTick; }
 
   // ── Core per-instrument logic ─────────────────────────────────────────────
 
-  private async processInstrument(inst: typeof INSTRUMENTS[number], vix: number) {
+  private async processInstrument(inst: typeof INSTRUMENTS[number], vix: number): Promise<string> {
+    const sym = inst.symbol.replace('NIFTY ', 'NIFTY');
     const now = new Date();
     const hhmm = istHHMM(now);
     const todayKey = new Date(now.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10);
@@ -100,7 +114,7 @@ export class LiveSignalService {
     ]);
     if (allBars5.length < 50) {
       this.logger.log(`${inst.symbol}: not enough bars (${allBars5.length})`);
-      return;
+      return `${sym}: not enough bars (${allBars5.length} < 50)`;
     }
 
     const last5 = allBars5[allBars5.length - 1];
@@ -117,7 +131,7 @@ export class LiveSignalService {
 
     if (sessionBars.length < 3) {
       this.logger.log(`${inst.symbol}: too few session bars (${sessionBars.length})`);
-      return;
+      return `${sym}: too few session bars (${sessionBars.length})`;
     }
 
     // 15-min rolling bars (for MTF EMA)
@@ -203,14 +217,17 @@ export class LiveSignalService {
           capitalAfter: +(capBefore + netPnl).toFixed(2),
         });
         this.logger.log(`Paper CLOSED: ${inst.symbol} ${open.direction} @ ₹${cp.toFixed(2)} | P&L ₹${netPnl} | Reason: ${exitReason}`);
+        return `${sym}: CLOSED ${open.direction} @ ₹${cp.toFixed(2)} | ${exitReason} | P&L ₹${netPnl}`;
       } else {
         this.logger.log(`${inst.symbol} open trade: curr ₹${cp.toFixed(2)} peak ₹${newPeak.toFixed(2)} SL ₹${newSL.toFixed(2)}`);
+        return `${sym}: OPEN ${open.direction} @ ₹${cp.toFixed(2)} | peak ₹${newPeak.toFixed(2)} | SL ₹${newSL.toFixed(2)}`;
       }
-      return;
     }
 
     // ── Entry check ───────────────────────────────────────────────────────────
-    if (!orbSet || hhmm < ENTRY_FROM || hhmm > ENTRY_TO) return;
+    if (!orbSet) return `${sym}: ORB building (${sessionBars.length}/${ORB_BARS} bars)`;
+    if (hhmm < ENTRY_FROM || hhmm > ENTRY_TO) return `${sym}: outside entry window (${hhmm})`;
+
 
     // Count today's trades for max-trades-per-day
     const todayTrades = await this.paperModel.find({
@@ -218,20 +235,20 @@ export class LiveSignalService {
       entryTime: { $gte: todayStartIST },
     });
     const tradesOpenedToday = todayTrades.length;
-    if (tradesOpenedToday >= maxTrades) return;
+    if (tradesOpenedToday >= maxTrades) return `${sym}: max trades reached (${tradesOpenedToday}/${maxTrades})`;
 
     // Cooldown from last exit
     const closedToday = todayTrades.filter(t => t.status === 'CLOSED' && t.exitTime);
     if (closedToday.length > 0) {
       const lastExit = closedToday.sort((a, b) =>
         new Date(b.exitTime!).getTime() - new Date(a.exitTime!).getTime())[0].exitTime!;
-      if (now.getTime() - new Date(lastExit).getTime() < COOLDOWN_MS) return;
+      if (now.getTime() - new Date(lastExit).getTime() < COOLDOWN_MS) return `${sym}: in 20-min cooldown`;
     }
 
     // CRISIS regime: only trade with gap direction
-    if (regime === 'CRISIS' && gapDir === 'NONE') return;
+    if (regime === 'CRISIS' && gapDir === 'NONE') return `${sym}: CRISIS regime requires gap direction`;
 
-    if (rollingBars.length < Math.max(EMA_SLOW, RSI_PERIOD, ST_PERIOD * 2) + 5) return;
+    if (rollingBars.length < Math.max(EMA_SLOW, RSI_PERIOD, ST_PERIOD * 2) + 5) return `${sym}: not enough rolling bars`;
 
     // ── Indicators ────────────────────────────────────────────────────────────
     const rc = rollingBars.map(b => b.close);
@@ -241,13 +258,13 @@ export class LiveSignalService {
     const efN = efArr[efArr.length - 1], esN = esArr[esArr.length - 1];
     const rsiV = rvArr[rvArr.length - 1], vwV = vw[vw.length - 1];
     const tN = st.trend[st.trend.length - 1];
-    if (!efN || !esN || !rsiV || !vwV || tN === 0) return;
+    if (!efN || !esN || !rsiV || !vwV || tN === 0) return `${sym}: insufficient indicator data`;
 
     // ADX filter
     const adxVal = adx(rollingBars, 14);
     if (adxVal < adxMin) {
       this.logger.log(`${inst.symbol}: ADX ${adxVal.toFixed(1)} < ${adxMin} — skip`);
-      return;
+      return `${sym}: ADX ${adxVal.toFixed(1)} < ${adxMin} (market not trending)`;
     }
 
     const bar = last5;
@@ -255,17 +272,17 @@ export class LiveSignalService {
     const putOk  = bar.close < orbLow  && tN === -1 && efN < esN && bar.close < vwV && rsiV < rsiBear;
     if (!callOk && !putOk) {
       this.logger.log(`${inst.symbol} @ ${hhmm}: no signal. close=${bar.close.toFixed(0)} orbH=${orbHigh.toFixed(0)} orbL=${orbLow.toFixed(0)} ema=${efN.toFixed(0)}/${esN.toFixed(0)} rsi=${rsiV.toFixed(1)} st=${tN}`);
-      return;
+      return `${sym}: no signal — close ${bar.close.toFixed(0)} vs ORB [${orbLow.toFixed(0)}–${orbHigh.toFixed(0)}] | EMA ${efN.toFixed(0)}/${esN.toFixed(0)} | RSI ${rsiV.toFixed(1)} | ST ${tN > 0 ? '▲' : '▼'}`;
     }
 
     // Gap direction lock
-    if (gapDir === 'UP'   && putOk  && !callOk) return;
-    if (gapDir === 'DOWN' && callOk && !putOk)  return;
+    if (gapDir === 'UP'   && putOk  && !callOk) return `${sym}: gap UP — PUT signal blocked`;
+    if (gapDir === 'DOWN' && callOk && !putOk)  return `${sym}: gap DOWN — CALL signal blocked`;
 
     // PDH/PDL break required
     if (pdHigh > 0 && pdLow < Infinity) {
-      if (callOk && bar.close <= pdHigh) return;
-      if (putOk  && bar.close >= pdLow)  return;
+      if (callOk && bar.close <= pdHigh) return `${sym}: CALL needs PDH break (${bar.close.toFixed(0)} ≤ ${pdHigh.toFixed(0)})`;
+      if (putOk  && bar.close >= pdLow)  return `${sym}: PUT needs PDL break (${bar.close.toFixed(0)} ≥ ${pdLow.toFixed(0)})`;
     }
 
     // Volume surge
@@ -273,7 +290,7 @@ export class LiveSignalService {
     const volAvg = recentVols.reduce((s, v) => s + v, 0) / recentVols.length;
     if (volAvg > 0 && bar.volume < volAvg * VOL_SURGE) {
       this.logger.log(`${inst.symbol}: volume surge failed (${bar.volume} < ${(volAvg * VOL_SURGE).toFixed(0)})`);
-      return;
+      return `${sym}: volume too low (${bar.volume} < ${(volAvg * VOL_SURGE).toFixed(0)} required)`;
     }
 
     // 15-min MTF EMA alignment
@@ -282,8 +299,8 @@ export class LiveSignalService {
       const ef15 = ema(c15, EMA_FAST), es15 = ema(c15, EMA_SLOW);
       const ef15N = ef15[ef15.length - 1], es15N = es15[es15.length - 1];
       if (ef15N && es15N) {
-        if (callOk && ef15N <= es15N) return;
-        if (putOk  && ef15N >= es15N) return;
+        if (callOk && ef15N <= es15N) return `${sym}: CALL blocked — 15min EMA bearish (${ef15N.toFixed(0)} ≤ ${es15N.toFixed(0)})`;
+        if (putOk  && ef15N >= es15N) return `${sym}: PUT blocked — 15min EMA bullish (${ef15N.toFixed(0)} ≥ ${es15N.toFixed(0)})`;
       }
     }
 
@@ -293,7 +310,7 @@ export class LiveSignalService {
     const T = this.tte(now);
     const ep = bsPrice(bar.close, strike, RISK_FREE_RATE, T, vix / 100,
       dir === 'CALL' ? 'call' : 'put');
-    if (ep < 10) return;
+    if (ep < 10) return `${sym}: premium too low (₹${ep.toFixed(2)} < ₹10)`;
 
     // ATR dynamic SL (range 25%–45%)
     const atrArr = atr(rollingBars, 14);
@@ -336,6 +353,7 @@ export class LiveSignalService {
       },
     });
     this.logger.log(`*** Paper ENTRY: ${inst.symbol} ${dir} ${strike} @ ₹${ep.toFixed(2)} | ${lots} lot(s) | SL ₹${slP} | regime: ${regime} ***`);
+    return `${sym}: *** ENTRY ${dir} ${strike} @ ₹${ep.toFixed(2)} | ${lots} lot(s) | SL ₹${slP} | ${regime} ***`;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

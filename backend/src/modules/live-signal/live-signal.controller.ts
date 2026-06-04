@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { LiveSignalService } from './live-signal.service';
 
@@ -9,6 +9,12 @@ export class LiveSignalController {
 
   @Get('account')
   getAccount() { return this.svc.getAccount(); }
+
+  @Get('last-tick')
+  getLastTick() { return this.svc.getLastTick(); }
+
+  @Post('force-tick')
+  forceTick() { return this.svc.forceTick(); }
 
   @Get('today')
   getToday() { return this.svc.getToday(); }

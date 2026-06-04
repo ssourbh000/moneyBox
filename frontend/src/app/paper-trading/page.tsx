@@ -2,8 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '@/components/layout/AppShell';
-import { Activity, RefreshCw, TrendingUp, TrendingDown, Clock } from 'lucide-react';
+import { Activity, RefreshCw, TrendingUp, TrendingDown, Clock, Zap } from 'lucide-react';
 import { liveSignalService } from '@/services/option-backtest.service';
+
+interface LastTick {
+  time: string;
+  vix: number;
+  regime: string;
+  results: string[];
+}
 
 interface PaperTrade {
   _id: string;
@@ -81,16 +88,20 @@ export default function PaperTradingPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastTick, setLastTick] = useState<LastTick | null>(null);
+  const [ticking, setTicking] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [acc, recent] = await Promise.all([
+      const [acc, recent, tick] = await Promise.all([
         liveSignalService.account(),
         liveSignalService.recent(365),
+        liveSignalService.lastTick(),
       ]);
       setAccount(acc);
       setTrades(recent);
+      setLastTick(tick);
     } catch (err) {
       console.error(err);
     } finally {
@@ -99,6 +110,23 @@ export default function PaperTradingPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh every 5 min
+  useEffect(() => {
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const handleForceTick = async () => {
+    setTicking(true);
+    try {
+      const result = await liveSignalService.forceTick();
+      if (result) setLastTick(result);
+      setTimeout(load, 2000);
+    } finally {
+      setTicking(false);
+    }
+  };
 
   const open  = trades.filter(t => t.status === 'OPEN');
   const today = trades.filter(t => {
@@ -117,8 +145,17 @@ export default function PaperTradingPage() {
             <h1 className="text-2xl font-bold text-white">Paper Trading</h1>
             <p className="text-gray-500 text-sm mt-1">Strategy B — 45-min ORB Breakout · ₹20,000 dummy capital</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-medium">Paper Mode</span>
+            <button
+              onClick={handleForceTick}
+              disabled={ticking}
+              title="Manually trigger one tick (for testing)"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+            >
+              <Zap className={`w-3.5 h-3.5 ${ticking ? 'animate-pulse' : ''}`} />
+              Force Tick
+            </button>
             <button
               onClick={load}
               disabled={loading}
@@ -127,6 +164,42 @@ export default function PaperTradingPage() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
+        </div>
+
+        {/* Last cron tick panel */}
+        <div className="bg-gray-800/60 border border-gray-700 rounded-xl px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-medium text-gray-300">Last Cron Tick</span>
+              {lastTick && (
+                <span className="text-xs text-gray-600">
+                  {new Date(lastTick.time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST
+                </span>
+              )}
+            </div>
+            {lastTick && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">VIX {lastTick.vix}</span>
+                {regimeBadge(lastTick.regime)}
+              </div>
+            )}
+          </div>
+          {!lastTick ? (
+            <p className="text-xs text-gray-600">No tick recorded yet — engine fires every 5 min during market hours (9:15 AM – 3:00 PM IST)</p>
+          ) : (
+            <div className="space-y-1.5">
+              {lastTick.results.map((r, i) => {
+                const isEntry = r.includes('ENTRY');
+                const isOpen  = r.includes('OPEN') && !r.includes('outside') && !r.includes('no signal');
+                const isClosed = r.includes('CLOSED');
+                const cls = isEntry ? 'text-emerald-400' : isClosed ? 'text-yellow-400' : isOpen ? 'text-blue-400' : 'text-gray-500';
+                return (
+                  <p key={i} className={`text-xs font-mono ${cls}`}>{r}</p>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Account cards */}
