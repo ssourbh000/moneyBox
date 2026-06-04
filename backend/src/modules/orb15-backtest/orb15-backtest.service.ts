@@ -20,8 +20,8 @@ import { computeMetrics, buildVixMap } from '../backtest-shared/metrics.util';
 //                        ADX ≥ 30, RSI 65/35 — captures panic-move profit
 
 const INSTRUMENTS = [
-  { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 25, tickSize: 50  },
-  { symbol: 'NIFTY BANK', exchange: 'NSE', lotSize: 15, tickSize: 100 },
+  { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 65, tickSize: 50  },
+  { symbol: 'NIFTY BANK', exchange: 'NSE', lotSize: 25, tickSize: 100 },
 ] as const;
 
 const RISK_FREE_RATE     = 0.07;

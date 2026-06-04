@@ -29,8 +29,8 @@ import { computeMetrics, buildVixMap } from '../backtest-shared/metrics.util';
 //    • FORCE   — exit at 2:30 PM unconditionally
 
 const INSTRUMENTS = [
-  { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 25, tickSize: 50,  expiryDow: 4 },
-  { symbol: 'NIFTY BANK', exchange: 'NSE', lotSize: 15, tickSize: 100, expiryDow: 3 },
+  { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 65, tickSize: 50,  expiryDow: 4 },
+  { symbol: 'NIFTY BANK', exchange: 'NSE', lotSize: 25, tickSize: 100, expiryDow: 3 },
 ] as const;
 
 const RISK_FREE_RATE    = 0.07;

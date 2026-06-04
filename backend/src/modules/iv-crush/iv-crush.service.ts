@@ -24,7 +24,7 @@ export interface BtTrade {
   strike: number;
 }
 
-const LOT_SIZE    = 25;
+const LOT_SIZE    = 65;
 const MAX_RISK    = 5_000;
 const BROKERAGE   = 80;        // per lot per leg
 const GAP_FILTER  = 0.8;       // % — skip if overnight gap > this

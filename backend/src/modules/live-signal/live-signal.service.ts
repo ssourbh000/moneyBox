@@ -13,8 +13,8 @@ import {
 // ── Strategy B v4: VIX Regime Mode — live paper trading engine ───────────────
 
 const INSTRUMENTS = [
-  { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 25, tickSize: 50  },
-  { symbol: 'NIFTY BANK', exchange: 'NSE', lotSize: 15, tickSize: 100 },
+  { symbol: 'NIFTY 50',   exchange: 'NSE', lotSize: 65, tickSize: 50  },
+  { symbol: 'NIFTY BANK', exchange: 'NSE', lotSize: 25, tickSize: 100 },
 ] as const;
 
 const STARTING_CAPITAL   = 20_000;

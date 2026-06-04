@@ -11,7 +11,7 @@ import {
 import { computeTradeSummary } from '../backtest-shared/metrics.util';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const LOT_SIZE   = 25;
+const LOT_SIZE   = 65;
 const MAX_RISK   = 5_000;
 const BROKERAGE  = 80;       // per lot per leg
 const TP_MULT    = 2.0;      // exit when straddle >= entry × 2.0 (100% gain)
