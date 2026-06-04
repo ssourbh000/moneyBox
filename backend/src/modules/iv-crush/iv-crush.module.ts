@@ -14,5 +14,6 @@ import { IVCrushService } from './iv-crush.service';
   ],
   controllers: [IVCrushController],
   providers:   [IVCrushService],
+  exports:     [IVCrushService],
 })
 export class IVCrushModule {}

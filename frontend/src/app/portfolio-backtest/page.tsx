@@ -11,14 +11,17 @@ import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 
 const STRATEGY_COLOR: Record<string, string> = {
   ORB:   'text-purple-400',
+  C1:    'text-blue-400',
   EVENT: 'text-yellow-400',
 };
 const STRATEGY_BG: Record<string, string> = {
   ORB:   'bg-purple-900 text-purple-200',
+  C1:    'bg-blue-900 text-blue-200',
   EVENT: 'bg-yellow-900 text-yellow-200',
 };
 const STRATEGY_LABEL: Record<string, string> = {
   ORB:   'B — ORB Breakout',
+  C1:    'C1 — IV Crush',
   EVENT: 'D — Event Alpha',
 };
 
@@ -70,7 +73,7 @@ function StrategyTable({ stats }: { stats: StrategyStats[] }) {
                 <div className="flex items-center gap-2">
                   <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${s.strategy === 'ORB' ? 'bg-purple-500' : 'bg-yellow-500'}`}
+                      className={`h-full rounded-full ${s.strategy === 'ORB' ? 'bg-purple-500' : s.strategy === 'C1' ? 'bg-blue-500' : 'bg-yellow-500'}`}
                       style={{ width: `${Math.min(100, Math.max(0, s.contribution))}%` }}
                     />
                   </div>
@@ -95,6 +98,7 @@ function MonthlyTable({ rows }: { rows: MonthlyRow[] }) {
           <tr className="text-xs text-gray-500 border-b border-gray-700">
             <th className="py-2 px-3">Month</th>
             <th className="py-2 px-3 text-purple-400">ORB</th>
+            <th className="py-2 px-3 text-blue-400">C1</th>
             <th className="py-2 px-3 text-yellow-400">Event</th>
             <th className="py-2 px-3 text-white">Total</th>
             <th className="py-2 px-3">Trades</th>
@@ -107,9 +111,10 @@ function MonthlyTable({ rows }: { rows: MonthlyRow[] }) {
               <tr key={r.month} className={`border-b border-gray-700 ${isGoodMonth ? '' : 'opacity-70'}`}>
                 <td className="py-2 px-3 text-gray-400 font-medium">{r.month}</td>
                 <td className={`py-2 px-3 ${pnlColor(r.orb)}`}>{r.orbN > 0 ? fmt(r.orb) : '—'}</td>
+                <td className={`py-2 px-3 ${pnlColor(r.c1)}`}>{r.c1N > 0 ? fmt(r.c1) : '—'}</td>
                 <td className={`py-2 px-3 ${pnlColor(r.event)}`}>{r.eventN > 0 ? fmt(r.event) : '—'}</td>
                 <td className={`py-2 px-3 font-bold ${pnlColor(r.total)}`}>{fmt(r.total)}</td>
-                <td className="py-2 px-3 text-gray-500 text-xs">{r.orbN + r.eventN}</td>
+                <td className="py-2 px-3 text-gray-500 text-xs">{r.orbN + r.c1N + r.eventN}</td>
               </tr>
             );
           })}
@@ -141,7 +146,7 @@ export default function PortfolioBacktestPage() {
 
   const handleRun = async () => {
     setLoading(true);
-    setStatus('Queued — running B + D strategies simultaneously…');
+    setStatus('Queued — running B + C1 + D strategies simultaneously…');
     try {
       const run = await portfolioBacktestService.run(fromDate, toDate, parseInt(capital) || 100_000);
       pollRef.current = setInterval(async () => {
@@ -154,7 +159,7 @@ export default function PortfolioBacktestPage() {
             await loadRuns();
             setSelected(updated);
           } else {
-            setStatus('Running ORB + Event in parallel…');
+            setStatus('Running ORB + C1 + Event in parallel…');
           }
         } catch { if (pollRef.current) clearInterval(pollRef.current); setLoading(false); }
       }, 5000);
@@ -174,9 +179,9 @@ export default function PortfolioBacktestPage() {
         <div className="flex items-center gap-3">
           <BarChart2 size={24} className="text-emerald-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">Portfolio Simulator — B + D</h1>
+            <h1 className="text-xl font-bold text-white">Portfolio Simulator — B + C1 + D</h1>
             <p className="text-sm text-gray-400">
-              Runs B (ORB) + D (Event Alpha) together on shared capital
+              Runs B (ORB) + C1 (IV Crush) + D (Event Alpha) together on shared capital
             </p>
           </div>
         </div>
@@ -184,7 +189,8 @@ export default function PortfolioBacktestPage() {
         {/* Strategy legend */}
         <div className="bg-gray-800 rounded-lg p-3 flex flex-wrap gap-3 text-xs">
           <span className="bg-purple-900 text-purple-300 px-2 py-0.5 rounded">B — ORB Breakout (daily)</span>
-          <span className="bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded">D — Event Alpha (monthly)</span>
+          <span className="bg-blue-900 text-blue-300 px-2 py-0.5 rounded">C1 — IV Crush (daily 9:20 AM)</span>
+          <span className="bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded">D — Event Alpha (event days)</span>
           <span className="ml-auto text-gray-500">Non-overlapping — each strategy fills a different market regime</span>
         </div>
 

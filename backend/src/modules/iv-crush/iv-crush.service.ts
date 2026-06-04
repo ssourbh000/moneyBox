@@ -464,4 +464,16 @@ export class IVCrushService {
       sharpeRatio: 0, roi: 0, finalCapital: init, equityCurve: [],
     };
   }
+
+  async simulateTrades(fromDate: string, toDate: string) {
+    const result = await this.runBacktest('', fromDate, toDate);
+    return result.trades.map(t => ({
+      ...t,
+      _strategy: 'C1' as const,
+      symbol: 'NIFTY 50',
+      entryTime: t.date + 'T03:50:00.000Z', // 9:20 AM IST
+      exitTime:  t.date + 'T04:30:00.000Z', // 10:00 AM IST
+      exitReason: t.exitReason,
+    }));
+  }
 }
