@@ -14,7 +14,6 @@ import {
   Settings,
   Zap,
   LogOut,
-  Activity,
   GitCompare,
   ChevronDown,
   ChevronRight,
@@ -41,7 +40,8 @@ const STRATEGIES = [
     color: 'text-blue-400',
     dot: 'bg-blue-500',
     links: [
-      { href: '/iv-crush', label: 'Paper Trade', icon: FileText },
+      { href: '/iv-crush-backtest', label: 'Backtest',    icon: FlaskConical },
+      { href: '/iv-crush',          label: 'Paper Trade', icon: FileText },
     ],
   },
   {
@@ -50,7 +50,8 @@ const STRATEGIES = [
     color: 'text-yellow-400',
     dot: 'bg-yellow-500',
     links: [
-      { href: '/event-alpha-backtest', label: 'Backtest', icon: FlaskConical },
+      { href: '/event-alpha-backtest', label: 'Backtest',    icon: FlaskConical },
+      { href: '/event-alpha-paper',    label: 'Paper Trade', icon: FileText },
     ],
   },
 ];
@@ -64,7 +65,6 @@ const TOP_NAV = [
 const TOOLS_NAV = [
   { href: '/portfolio-backtest', label: 'Portfolio Sim',     icon: BarChart2 },
   { href: '/strategy-compare',   label: 'Strategy Compare', icon: GitCompare },
-  { href: '/live-signals',       label: 'Live Signals',     icon: Activity },
 ];
 
 const TRADING_NAV = [
@@ -80,7 +80,7 @@ const TRADING_NAV = [
 
 function NavLink({ href, label, icon: Icon, indent = false }: { href: string; label: string; icon: any; indent?: boolean }) {
   const pathname = usePathname();
-  const active = pathname.startsWith(href);
+  const active = pathname === href || pathname.startsWith(href + '/');
   return (
     <Link
       href={href}
@@ -108,7 +108,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function StrategyGroup({ strategy, defaultOpen }: { strategy: typeof STRATEGIES[number]; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const pathname = usePathname();
-  const anyActive = strategy.links.some(l => pathname.startsWith(l.href));
+  const anyActive = strategy.links.some(l => pathname === l.href || pathname.startsWith(l.href + '/'));
 
   return (
     <div>
@@ -141,7 +141,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [strategiesOpen, setStrategiesOpen] = useState(true);
 
-  const anyStrategyActive = STRATEGIES.some(s => s.links.some(l => pathname.startsWith(l.href)));
+  const anyStrategyActive = STRATEGIES.some(s => s.links.some(l => pathname === l.href || pathname.startsWith(l.href + '/')));
 
   return (
     <aside className="flex flex-col w-60 min-h-screen bg-gray-950 border-r border-gray-800 px-3 py-6">

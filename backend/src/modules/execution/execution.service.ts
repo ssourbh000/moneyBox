@@ -14,10 +14,4 @@ export class ExecutionService {
     return this.orderModel.find(filter).sort({ createdAt: -1 }).limit(limit);
   }
 
-  async getOrdersByStrategy(strategyId: string, limit = 100): Promise<OrderDocument[]> {
-    return this.orderModel
-      .find({ strategyId: new Types.ObjectId(strategyId) })
-      .sort({ createdAt: -1 })
-      .limit(limit);
-  }
 }

@@ -6,6 +6,7 @@ import EquityChart from '@/components/charts/EquityChart';
 import { BarChart2, Play, RefreshCw, Trophy, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import api from '@/lib/api';
 import type { OBRun, OBMetrics } from '@/services/option-backtest.service';
+import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 
 // ── Strategy registry ─────────────────────────────────────────────────────────
 
@@ -65,9 +66,6 @@ function DeltaBadge({ base, value }: { base: number | undefined; value: number |
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-
-const TWO_YEARS_AGO = new Date(Date.now() - 2 * 365 * 86_400_000).toISOString().slice(0, 10);
-const TODAY         = new Date().toISOString().slice(0, 10);
 
 export default function StrategyComparePage() {
   const [fromDate, setFromDate] = useState(TWO_YEARS_AGO);

@@ -42,10 +42,4 @@ export class AuditService {
       .limit(limit);
   }
 
-  async getLogsByAction(action: AuditAction, limit = 50): Promise<AuditLogDocument[]> {
-    return this.auditModel
-      .find({ action })
-      .sort({ createdAt: -1 })
-      .limit(limit);
-  }
 }

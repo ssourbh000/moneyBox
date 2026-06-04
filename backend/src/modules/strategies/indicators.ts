@@ -17,15 +17,6 @@ export function ema(values: number[], period: number): number[] {
   return result;
 }
 
-export function sma(values: number[], period: number): number[] {
-  if (values.length < period) return [];
-  const result: number[] = [];
-  for (let i = period - 1; i < values.length; i++) {
-    result.push(values.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
-  }
-  return result;
-}
-
 export function rsi(closes: number[], period: number): number[] {
   if (closes.length < period + 1) return [];
   const gains: number[] = [];
@@ -74,41 +65,7 @@ export function atr(candles: OHLCV[], period: number): number[] {
 }
 
 export function adx(candles: OHLCV[], period: number): number {
-  if (candles.length < period * 2 + 1) return 0;
-  const pdms: number[] = [];
-  const ndms: number[] = [];
-  const trs: number[] = [];
-  for (let i = 1; i < candles.length; i++) {
-    const up = candles[i].high - candles[i - 1].high;
-    const dn = candles[i - 1].low - candles[i].low;
-    pdms.push(up > dn && up > 0 ? up : 0);
-    ndms.push(dn > up && dn > 0 ? dn : 0);
-    trs.push(
-      Math.max(
-        candles[i].high - candles[i].low,
-        Math.abs(candles[i].high - candles[i - 1].close),
-        Math.abs(candles[i].low - candles[i - 1].close),
-      ),
-    );
-  }
-  let spdm = pdms.slice(0, period).reduce((a, b) => a + b, 0);
-  let sndm = ndms.slice(0, period).reduce((a, b) => a + b, 0);
-  let str = trs.slice(0, period).reduce((a, b) => a + b, 0);
-  const dxValues: number[] = [];
-  for (let i = period; i < pdms.length; i++) {
-    spdm = spdm - spdm / period + pdms[i];
-    sndm = sndm - sndm / period + ndms[i];
-    str = str - str / period + trs[i];
-    const pdi = (100 * spdm) / (str || 1e-10);
-    const ndi = (100 * sndm) / (str || 1e-10);
-    dxValues.push((100 * Math.abs(pdi - ndi)) / (pdi + ndi || 1e-10));
-  }
-  if (dxValues.length < period) return 0;
-  let adxVal = dxValues.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < dxValues.length; i++) {
-    adxVal = (adxVal * (period - 1) + dxValues[i]) / period;
-  }
-  return adxVal;
+  return adxSeries(candles, period).at(-1) ?? 0;
 }
 
 export function volumeRatio(volumes: number[], period: number): number {

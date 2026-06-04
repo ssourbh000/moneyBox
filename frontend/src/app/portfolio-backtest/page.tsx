@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AppShell from '@/components/layout/AppShell';
 import EquityChart from '@/components/charts/EquityChart';
 import { BarChart2, Play, RefreshCw } from 'lucide-react';
 import { portfolioBacktestService, type PortfolioMetrics, type MonthlyRow, type StrategyStats } from '@/services/portfolio-backtest.service';
 import type { PortfolioRun } from '@/services/portfolio-backtest.service';
-
-const TWO_YEARS_AGO = new Date(Date.now() - 2 * 365 * 86_400_000).toISOString().slice(0, 10);
-const TODAY         = new Date().toISOString().slice(0, 10);
+import RunStatusBadge from '@/components/ui/RunStatusBadge';
+import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 
 const STRATEGY_COLOR: Record<string, string> = {
   ORB:   'text-purple-400',
@@ -34,14 +33,6 @@ function MetricCard({ label, value, sub, highlight }: { label: string; value: st
       {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    COMPLETED: 'bg-green-800 text-green-200', RUNNING: 'bg-yellow-800 text-yellow-200',
-    QUEUED: 'bg-gray-700 text-gray-300', FAILED: 'bg-red-800 text-red-200',
-  };
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] ?? 'bg-gray-700 text-gray-300'}`}>{status}</span>;
 }
 
 function StrategyTable({ stats }: { stats: StrategyStats[] }) {
@@ -136,6 +127,7 @@ export default function PortfolioBacktestPage() {
   const [selected, setSelected]   = useState<PortfolioRun | null>(null);
   const [loading,  setLoading]    = useState(false);
   const [status,   setStatus]     = useState('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadRuns = async () => {
     try { setRuns(await portfolioBacktestService.list()); } catch { /* ignore */ }
@@ -143,16 +135,20 @@ export default function PortfolioBacktestPage() {
 
   useEffect(() => { loadRuns(); }, []);
 
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
   const handleRun = async () => {
     setLoading(true);
     setStatus('Queued — running B + D strategies simultaneously…');
     try {
       const run = await portfolioBacktestService.run(fromDate, toDate, parseInt(capital) || 100_000);
-      const poll = setInterval(async () => {
+      pollRef.current = setInterval(async () => {
         try {
           const updated = await portfolioBacktestService.get(run._id);
           if (updated.status === 'COMPLETED' || updated.status === 'FAILED') {
-            clearInterval(poll);
+            if (pollRef.current) clearInterval(pollRef.current);
             setLoading(false);
             setStatus(updated.status === 'COMPLETED' ? 'Completed' : `Failed: ${updated.errorMessage}`);
             await loadRuns();
@@ -160,7 +156,7 @@ export default function PortfolioBacktestPage() {
           } else {
             setStatus('Running ORB + Event in parallel…');
           }
-        } catch { clearInterval(poll); setLoading(false); }
+        } catch { if (pollRef.current) clearInterval(pollRef.current); setLoading(false); }
       }, 5000);
     } catch (e: any) {
       setStatus(`Error: ${e.message}`);
@@ -292,7 +288,7 @@ export default function PortfolioBacktestPage() {
                         </span>
                       </>
                     )}
-                    <StatusBadge status={r.status} />
+                    <RunStatusBadge status={r.status} />
                   </div>
                 </div>
               ))}

@@ -15,6 +15,7 @@ export class EventAlphaRun {
   @Prop({ type: Types.ObjectId, required: true }) userId: Types.ObjectId;
   @Prop({ required: true }) fromDate: Date;
   @Prop({ required: true }) toDate: Date;
+  @Prop({ default: 100_000 }) startingCapital: number;
   @Prop({ default: EAStatus.QUEUED }) status: string;
   @Prop() errorMessage?: string;
   @Prop({ type: Object }) metrics?: Record<string, any>;

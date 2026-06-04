@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { PortfolioRun, PortfolioRunDocument, PFStatus } from './schemas/portfolio-backtest-run.schema';
 import { Orb15BacktestService } from '../orb15-backtest/orb15-backtest.service';
 import { EventAlphaBacktestService } from '../event-alpha-backtest/event-alpha-backtest.service';
+import { mean, stdDev } from '../strategies/indicators';
 
 type Strategy = 'ORB' | 'EVENT';
 
@@ -18,12 +19,6 @@ interface PortfolioTrade {
   [key: string]: any;
 }
 
-function mean(a: number[]) { return a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0; }
-function stdDev(a: number[]) {
-  if (a.length < 2) return 0;
-  const m = mean(a);
-  return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1));
-}
 
 @Injectable()
 export class PortfolioBacktestService {

@@ -20,6 +20,7 @@ import { EventAlphaBacktestModule } from './modules/event-alpha-backtest/event-a
 import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 import { IVCrushModule } from './modules/iv-crush/iv-crush.module';
+import { EventAlphaPaperModule } from './modules/event-alpha-paper/event-alpha-paper.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { IVCrushModule } from './modules/iv-crush/iv-crush.module';
     PortfolioBacktestModule,
     LiveSignalModule,
     IVCrushModule,
+    EventAlphaPaperModule,
   ],
 })
 export class AppModule {}

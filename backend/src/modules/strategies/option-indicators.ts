@@ -1,7 +1,10 @@
 import { OHLCV } from './indicators';
 
+// ── Shared constants ──────────────────────────────────────────────────────────
+export const RISK_FREE = 0.065;
+
 // ── Normal CDF (Abramowitz & Stegun) ──────────────────────────────────────────
-function normCDF(x: number): number {
+export function normCDF(x: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(x));
   const d = 0.39894228 * Math.exp(-0.5 * x * x);
   const p = d * t * (0.31938153 + t * (-0.35656378 + t * (1.78147794 + t * (-1.82125978 + t * 1.33027443))));
@@ -23,6 +26,31 @@ export function bsPrice(
   const d2 = d1 - sigma * sqrtT;
   if (type === 'call') return S * normCDF(d1) - K * Math.exp(-r * T) * normCDF(d2);
   return K * Math.exp(-r * T) * normCDF(-d2) - S * normCDF(-d1);
+}
+
+// ── Shared straddle helpers ───────────────────────────────────────────────────
+
+export function daysToNextThursday(date: Date): number {
+  const day = date.getUTCDay();
+  if (day === 4) return 0;
+  return day < 4 ? 4 - day : 7 - (day - 4);
+}
+
+export function tFromTimestamp(ts: Date): number {
+  const closeUTC = new Date(ts);
+  closeUTC.setUTCHours(10, 0, 0, 0);
+  const minsRemaining = Math.max(0, (closeUTC.getTime() - ts.getTime()) / 60_000);
+  return (daysToNextThursday(ts) + minsRemaining / (24 * 60)) / 365;
+}
+
+export function atmStraddle(S: number, T: number, sigma: number): number {
+  const K = Math.round(S / 50) * 50;
+  return bsPrice(S, K, RISK_FREE, T, sigma, 'call') + bsPrice(S, K, RISK_FREE, T, sigma, 'put');
+}
+
+export function todayKeyIST(ts: Date): string {
+  const ist = new Date(ts.getTime() + 330 * 60_000);
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
 }
 
 // ── ITM strike selection ──────────────────────────────────────────────────────
@@ -106,23 +134,6 @@ export function calcORB(sessionBars: OHLCV[], numBars = 3): { high: number; low:
   };
 }
 
-// ── Central Pivot Range ───────────────────────────────────────────────────────
-export interface CPR {
-  pivot: number;
-  tc: number;   // Top of CPR
-  bc: number;   // Bottom of CPR
-  width: number;
-  widthPct: number; // width as % of pivot (< 0.3% = narrow = trending day)
-}
-
-export function calcCPR(prevDay: OHLCV): CPR {
-  const pivot = (prevDay.high + prevDay.low + prevDay.close) / 3;
-  const bc = (prevDay.high + prevDay.low) / 2;
-  const tc = 2 * pivot - bc;
-  const width = Math.abs(tc - bc);
-  return { pivot, tc, bc, width, widthPct: (width / pivot) * 100 };
-}
-
 // ── Time helpers (IST) ────────────────────────────────────────────────────────
 export function istHHMM(date: Date): number {
   const ist = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
@@ -141,4 +152,15 @@ export function isNewDay(prev: Date, curr: Date): boolean {
   return pIST.getUTCDate() !== cIST.getUTCDate() ||
     pIST.getUTCMonth() !== cIST.getUTCMonth() ||
     pIST.getUTCFullYear() !== cIST.getUTCFullYear();
+}
+
+// ── Shared trade helpers ──────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function upsertSkippedTrade(model: any, dk: string, reason: string): Promise<void> {
+  await model.findOneAndUpdate(
+    { date: dk },
+    { date: dk, status: 'SKIPPED', skipReason: reason },
+    { upsert: true, new: true },
+  );
 }

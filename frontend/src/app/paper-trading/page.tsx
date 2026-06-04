@@ -2,15 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '@/components/layout/AppShell';
-import { Activity, RefreshCw, TrendingUp, TrendingDown, Clock, Zap } from 'lucide-react';
+import { Activity, RefreshCw, Zap, Clock, TrendingUp, TrendingDown } from 'lucide-react';
 import { liveSignalService } from '@/services/option-backtest.service';
+import { fmt, pnlCls, exitReasonCls, statusBadge, isEngineActive } from '@/lib/trade-fmt';
 
-interface LastTick {
-  time: string;
-  vix: number;
-  regime: string;
-  results: string[];
-}
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface PaperTrade {
   _id: string;
@@ -31,8 +27,6 @@ interface PaperTrade {
   regime?: string;
   peakPremium?: number;
   trailSL?: boolean;
-  capitalBefore?: number;
-  capitalAfter?: number;
   meta?: Record<string, string | number>;
 }
 
@@ -48,32 +42,24 @@ interface Account {
   winRate: number;
   avgWin: number;
   avgLoss: number;
-  equityCurve: { date: string; equity: number }[];
 }
 
-function fmt(v: number, showSign = true) {
-  const sign = showSign ? (v >= 0 ? '+' : '') : '';
-  return sign + '₹' + Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+interface LastTick {
+  time: string;
+  vix: number;
+  regime: string;
+  results: string[];
 }
 
-function pct(v: number) {
-  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
-}
-
-function pnlCls(v: number) {
-  return v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-gray-400';
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function regimeBadge(regime?: string) {
   if (!regime) return null;
-  const cls = regime === 'NORMAL'
-    ? 'bg-emerald-500/10 text-emerald-400'
-    : regime === 'HIGH'
-    ? 'bg-yellow-500/10 text-yellow-400'
-    : 'bg-red-500/10 text-red-400';
-  return (
-    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${cls}`}>{regime}</span>
-  );
+  const cls =
+    regime === 'NORMAL' ? 'bg-emerald-500/10 text-emerald-400' :
+    regime === 'HIGH'   ? 'bg-yellow-500/10 text-yellow-400'   :
+    'bg-red-500/10 text-red-400';
+  return <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${cls}`}>{regime}</span>;
 }
 
 function istTime(iso: string) {
@@ -81,22 +67,125 @@ function istTime(iso: string) {
 }
 
 function istDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+  return new Date(iso).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// ── Today Card ────────────────────────────────────────────────────────────────
+
+function TodayCard({ open, today }: { open: PaperTrade[]; today: PaperTrade[] }) {
+  if (today.length === 0) {
+    return (
+      <div className="bg-gray-800 rounded-xl border border-gray-700 px-5 py-6">
+        <p className="text-gray-500 text-sm">No trade today yet — engine fires every 5 min, 9:15 AM – 3:00 PM IST</p>
+      </div>
+    );
+  }
+
+  const t = today[today.length - 1];
+  const isOpen = t.status === 'OPEN';
+  const borderCls = isOpen ? 'border-yellow-500/40' :
+    (t.netPnl ?? 0) > 0 ? 'border-emerald-500/30' : 'border-red-500/20';
+
+  return (
+    <div className={`bg-gray-800 rounded-xl border ${borderCls} px-5 py-5`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-white font-semibold text-base">Today — {istDate(t.entryTime)}</h3>
+          {regimeBadge(t.regime)}
+        </div>
+        <span className={statusBadge(t.status)}>{t.status}</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Direction</p>
+          <div className="flex items-center gap-1.5">
+            {t.direction === 'CALL'
+              ? <TrendingUp className="w-4 h-4 text-emerald-400" />
+              : <TrendingDown className="w-4 h-4 text-red-400" />}
+            <span className="text-white font-mono font-bold">{t.direction}</span>
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Strike</p>
+          <p className="text-white font-mono font-bold">{t.strike}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Entry Premium</p>
+          <p className="text-white font-mono font-bold">₹{t.entryPremium}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Lots</p>
+          <p className="text-white font-mono font-bold">{t.lots} × {t.lotSize}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">VIX</p>
+          <p className="text-white font-mono">{t.vix?.toFixed(1)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Entry Time</p>
+          <p className="text-white font-mono">{istTime(t.entryTime)}</p>
+        </div>
+
+        {isOpen && (
+          <>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Peak Premium</p>
+              <p className="text-emerald-400 font-mono font-bold">₹{t.peakPremium ?? t.entryPremium}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Stop Loss</p>
+              <p className="text-red-400 font-mono font-bold">₹{t.slPremium}</p>
+            </div>
+          </>
+        )}
+
+        {!isOpen && t.exitPremium != null && (
+          <>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Exit Premium</p>
+              <p className="text-white font-mono font-bold">₹{t.exitPremium}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Net P&amp;L</p>
+              <p className={`font-mono font-bold text-lg ${pnlCls(t.netPnl ?? 0)}`}>{fmt(t.netPnl ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Exit</p>
+              <p className={`font-mono font-bold ${exitReasonCls(t.exitReason)}`}>{t.exitReason}</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {t.meta && (
+        <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-600">
+          {t.meta.orbHigh  && <span>ORB {t.meta.orbHigh}/{t.meta.orbLow}</span>}
+          {t.meta.vwap     && <span>VWAP {t.meta.vwap}</span>}
+          {t.meta.ema9     && <span>EMA {t.meta.ema9}/{t.meta.ema21}</span>}
+          {t.meta.rsi      && <span>RSI {t.meta.rsi}</span>}
+          {t.meta.adx      && <span>ADX {t.meta.adx}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function PaperTradingPage() {
-  const [account, setAccount] = useState<Account | null>(null);
-  const [trades, setTrades] = useState<PaperTrade[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [account,  setAccount]  = useState<Account | null>(null);
+  const [trades,   setTrades]   = useState<PaperTrade[]>([]);
   const [lastTick, setLastTick] = useState<LastTick | null>(null);
-  const [ticking, setTicking] = useState(false);
+  const [loading,  setLoading]  = useState(true);
+  const [forcing,  setForcing]  = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [acc, recent, tick] = await Promise.all([
         liveSignalService.account(),
-        liveSignalService.recent(365),
+        liveSignalService.recent(60),
         liveSignalService.lastTick(),
       ]);
       setAccount(acc);
@@ -109,52 +198,57 @@ export default function PaperTradingPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  // Auto-refresh every 5 min
   useEffect(() => {
-    const id = setInterval(load, 5 * 60 * 1000);
+    load();
+    const id = setInterval(load, 60_000);
     return () => clearInterval(id);
   }, [load]);
 
-  const handleForceTick = async () => {
-    setTicking(true);
+  const handleForceTick = useCallback(async () => {
+    setForcing(true);
     try {
       const result = await liveSignalService.forceTick();
       if (result) setLastTick(result);
       setTimeout(load, 2000);
     } finally {
-      setTicking(false);
+      setForcing(false);
     }
-  };
+  }, [load]);
 
-  const open  = trades.filter(t => t.status === 'OPEN');
   const today = trades.filter(t => {
-    const d = new Date(t.entryTime).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const d   = new Date(t.entryTime).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
     const now = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
     return d === now;
   });
+  const open   = trades.filter(t => t.status === 'OPEN');
   const closed = trades.filter(t => t.status === 'CLOSED');
 
+  const active = isEngineActive(lastTick, 'results');
+
   return (
-    <AppShell>
+    <AppShell mainClassName={active ? 'bg-emerald-950/40' : 'bg-gray-950/60'}>
       <div className="space-y-6">
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Paper Trading</h1>
-            <p className="text-gray-500 text-sm mt-1">Strategy B — 45-min ORB Breakout · ₹20,000 dummy capital</p>
+            <h1 className="text-2xl font-bold text-white">B — 45-min ORB</h1>
+            <p className="text-gray-500 text-sm mt-1">
+              45-min opening range · EMA direction · 10:00–14:00 · 3 trades/day
+            </p>
           </div>
           <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-1 rounded font-medium ${active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-500'}`}>
+              {active ? '● Live' : '○ Inactive'}
+            </span>
             <span className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-medium">Paper Mode</span>
             <button
               onClick={handleForceTick}
-              disabled={ticking}
-              title="Manually trigger one tick (for testing)"
+              disabled={forcing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
             >
-              <Zap className={`w-3.5 h-3.5 ${ticking ? 'animate-pulse' : ''}`} />
-              Force Tick
+              <Zap className={`w-3.5 h-3.5 ${forcing ? 'animate-pulse' : ''}`} />
+              {forcing ? 'Ticking…' : 'Force Tick'}
             </button>
             <button
               onClick={load}
@@ -166,7 +260,7 @@ export default function PaperTradingPage() {
           </div>
         </div>
 
-        {/* Last cron tick panel */}
+        {/* Last Cron Tick panel */}
         <div className="bg-gray-800/60 border border-gray-700 rounded-xl px-5 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -188,193 +282,127 @@ export default function PaperTradingPage() {
           {!lastTick ? (
             <p className="text-xs text-gray-600">No tick recorded yet — engine fires every 5 min during market hours (9:15 AM – 3:00 PM IST)</p>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {lastTick.results.map((r, i) => {
-                const isEntry = r.includes('ENTRY');
-                const isOpen  = r.includes('OPEN') && !r.includes('outside') && !r.includes('no signal');
+                const isEntry  = r.includes('ENTRY');
                 const isClosed = r.includes('CLOSED');
+                const isOpen   = r.includes('OPEN') && !r.includes('outside') && !r.includes('no signal');
                 const cls = isEntry ? 'text-emerald-400' : isClosed ? 'text-yellow-400' : isOpen ? 'text-blue-400' : 'text-gray-500';
-                return (
-                  <p key={i} className={`text-xs font-mono ${cls}`}>{r}</p>
-                );
+                return <p key={i} className={`text-xs font-mono ${cls}`}>{r}</p>;
               })}
             </div>
           )}
         </div>
 
-        {/* Account cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs text-gray-500 mb-1">Account Equity</p>
-            <p className={`text-xl font-bold ${account ? pnlCls(account.netPnl) : 'text-white'}`}>
-              {account ? fmt(account.equity, false) : '—'}
-            </p>
-            <p className={`text-xs mt-1 ${account ? pnlCls(account.netPnl) : 'text-gray-500'}`}>
-              {account ? `${pct(account.roi)} ROI` : ''}
-            </p>
-          </div>
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs text-gray-500 mb-1">Net P&amp;L</p>
-            <p className={`text-xl font-bold ${account ? pnlCls(account.netPnl) : 'text-white'}`}>
-              {account ? fmt(account.netPnl) : '—'}
-            </p>
-            <p className="text-xs text-gray-600 mt-1">Starting: ₹20,000</p>
-          </div>
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs text-gray-500 mb-1">Win Rate</p>
-            <p className="text-xl font-bold text-white">{account ? `${account.winRate}%` : '—'}</p>
-            <p className="text-xs text-gray-600 mt-1">
-              {account ? `${account.wins}W / ${account.closedTrades - account.wins}L` : ''}
-            </p>
-          </div>
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs text-gray-500 mb-1">Trades</p>
-            <p className="text-xl font-bold text-white">{account?.totalTrades ?? '—'}</p>
-            <p className="text-xs text-gray-600 mt-1">
-              {account ? `${account.openTrades} open · ${account.closedTrades} closed` : ''}
-            </p>
-          </div>
-        </div>
+        {/* Today Card */}
+        <TodayCard open={open} today={today} />
 
-        {/* Open position */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700">
-          <div className="px-5 py-4 border-b border-gray-700">
-            <h2 className="text-sm font-semibold text-gray-300">
-              Open Position {open.length > 0 && <span className="ml-2 text-xs bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded">{open.length}</span>}
-            </h2>
-          </div>
-          {open.length === 0 ? (
-            <div className="flex flex-col items-center py-8 text-gray-600">
-              <Clock className="w-7 h-7 mb-2 opacity-30" />
-              <p className="text-sm">No open position — waiting for signal</p>
-            </div>
-          ) : (
-            open.map(t => (
-              <div key={t._id} className="px-5 py-4">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center gap-3">
-                    {t.direction === 'CALL'
-                      ? <TrendingUp className="w-5 h-5 text-emerald-400" />
-                      : <TrendingDown className="w-5 h-5 text-red-400" />}
-                    <div>
-                      <span className="font-semibold text-white">{t.symbol}</span>
-                      <span className="ml-2 text-sm text-gray-400">{t.direction} {t.strike}</span>
-                      {regimeBadge(t.regime)}
-                    </div>
-                  </div>
-                  <div className="flex gap-6 text-sm">
-                    <div><p className="text-gray-500 text-xs">Entry</p><p className="text-white">₹{t.entryPremium}</p></div>
-                    <div><p className="text-gray-500 text-xs">SL</p><p className="text-red-400">₹{t.slPremium}</p></div>
-                    <div><p className="text-gray-500 text-xs">Peak</p><p className="text-emerald-400">₹{t.peakPremium ?? t.entryPremium}</p></div>
-                    <div><p className="text-gray-500 text-xs">Lots</p><p className="text-white">{t.lots}</p></div>
-                    <div><p className="text-gray-500 text-xs">VIX</p><p className="text-white">{t.vix?.toFixed(1)}</p></div>
-                    <div><p className="text-gray-500 text-xs">Time</p><p className="text-white">{istTime(t.entryTime)}</p></div>
-                  </div>
-                </div>
-                {t.meta && (
-                  <div className="flex gap-4 mt-3 text-xs text-gray-600">
-                    <span>ORB H/L {t.meta.orbHigh}/{t.meta.orbLow}</span>
-                    <span>VWAP {t.meta.vwap}</span>
-                    <span>EMA9/21 {t.meta.ema9}/{t.meta.ema21}</span>
-                    <span>RSI {t.meta.rsi}</span>
-                    <span>ADX {t.meta.adx}</span>
-                    <span>Gap {t.meta.gapDir}</span>
-                  </div>
-                )}
-                {t.trailSL && (
-                  <p className="text-xs text-yellow-400 mt-2">Trailing SL active — SL has moved up from initial</p>
-                )}
+        {/* Summary cards */}
+        {account && account.totalTrades > 0 && (
+          <>
+            <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Last 60 Days</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                <p className="text-xs text-gray-500 mb-1">Net P&amp;L</p>
+                <p className={`text-xl font-bold ${pnlCls(account.netPnl)}`}>{fmt(account.netPnl)}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {account.roi >= 0 ? '+' : ''}{account.roi.toFixed(2)}% ROI
+                </p>
               </div>
-            ))
-          )}
-        </div>
-
-        {/* Today's trades */}
-        {today.length > 0 && (
-          <div className="bg-gray-800 rounded-xl border border-gray-700">
-            <div className="px-5 py-4 border-b border-gray-700">
-              <h2 className="text-sm font-semibold text-gray-300">Today&apos;s Trades</h2>
+              <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                <p className="text-xs text-gray-500 mb-1">Win Rate</p>
+                <p className="text-xl font-bold text-white">{account.winRate}%</p>
+                <p className="text-xs text-gray-600 mt-1">{account.wins}W / {account.closedTrades - account.wins}L</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                <p className="text-xs text-gray-500 mb-1">Trades</p>
+                <p className="text-xl font-bold text-white">{account.totalTrades}</p>
+                <p className="text-xs text-gray-600 mt-1">{account.openTrades} open · {account.closedTrades} closed</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                <p className="text-xs text-gray-500 mb-1">Avg Win / Loss</p>
+                <p className="text-xl font-bold text-white">{fmt(account.avgWin, false)}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Avg W: {fmt(account.avgWin)} &nbsp;|&nbsp; <span className="text-red-400">Avg L: {fmt(account.avgLoss)}</span>
+                </p>
+              </div>
             </div>
-            <div className="divide-y divide-gray-700">
-              {today.map(t => (
-                <TradeRow key={t._id} t={t} />
-              ))}
-            </div>
-          </div>
+          </>
         )}
 
-        {/* All trade history */}
+        {/* Trade History table */}
         <div className="bg-gray-800 rounded-xl border border-gray-700">
           <div className="px-5 py-4 border-b border-gray-700 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-300">Trade History ({closed.length} trades)</h2>
-            {account && (
-              <span className={`text-sm font-medium ${pnlCls(account.avgWin)}`}>
-                Avg W: {fmt(account.avgWin)} &nbsp;|&nbsp;
-                <span className="text-red-400">Avg L: {fmt(account.avgLoss)}</span>
-              </span>
-            )}
+            <h2 className="text-sm font-semibold text-gray-300">
+              Trade History ({closed.length} closed)
+            </h2>
           </div>
-          {closed.length === 0 ? (
+          {trades.length === 0 ? (
             <div className="flex flex-col items-center py-10 text-gray-600">
-              <Activity className="w-8 h-8 mb-2 opacity-30" />
-              <p className="text-sm">No closed trades yet</p>
+              <Clock className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm">No trades yet</p>
               <p className="text-xs mt-1">The cron engine fires every 5 min during market hours (9:15 AM – 3:00 PM IST)</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-700">
-              {closed.slice().reverse().map(t => (
-                <TradeRow key={t._id} t={t} showCapital />
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-gray-300 border-collapse">
+                <thead>
+                  <tr className="text-gray-500 border-b border-gray-700">
+                    <th className="py-2.5 px-4 text-left">Date</th>
+                    <th className="py-2.5 px-3 text-left">Dir</th>
+                    <th className="py-2.5 px-3 text-right">Strike</th>
+                    <th className="py-2.5 px-3 text-right">Entry ₹</th>
+                    <th className="py-2.5 px-3 text-right">Exit ₹</th>
+                    <th className="py-2.5 px-3 text-right">Lots</th>
+                    <th className="py-2.5 px-3 text-right">VIX</th>
+                    <th className="py-2.5 px-3 text-left">Regime</th>
+                    <th className="py-2.5 px-3 text-center">Exit</th>
+                    <th className="py-2.5 px-4 text-right">Net P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {closed.slice().reverse().map(t => (
+                    <tr key={t._id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="py-2 px-4 font-mono">{istDate(t.entryTime)}</td>
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-1">
+                          {t.direction === 'CALL'
+                            ? <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                            : <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
+                          <span className={t.direction === 'CALL' ? 'text-emerald-400' : 'text-red-400'}>
+                            {t.direction}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono">{t.strike}</td>
+                      <td className="py-2 px-3 text-right font-mono">{t.entryPremium}</td>
+                      <td className="py-2 px-3 text-right font-mono">{t.exitPremium ?? '—'}</td>
+                      <td className="py-2 px-3 text-right">{t.lots}</td>
+                      <td className="py-2 px-3 text-right">{t.vix?.toFixed(1)}</td>
+                      <td className="py-2 px-3">{regimeBadge(t.regime)}</td>
+                      <td className="py-2 px-3 text-center">
+                        {t.exitReason ? (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            t.exitReason === 'TRAIL_SL' ? 'bg-yellow-500/10 text-yellow-400' :
+                            t.exitReason === 'SL'       ? 'bg-red-500/10 text-red-400'       :
+                            'bg-gray-700 text-gray-400'
+                          }`}>{t.exitReason}</span>
+                        ) : '—'}
+                      </td>
+                      <td className={`py-2 px-4 text-right font-mono font-bold ${
+                        t.status === 'OPEN' ? 'text-yellow-400' : pnlCls(t.netPnl ?? 0)
+                      }`}>
+                        {t.status === 'OPEN' ? 'OPEN' : (t.netPnl != null ? fmt(t.netPnl) : '—')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
+
       </div>
     </AppShell>
-  );
-}
-
-function TradeRow({ t, showCapital }: { t: PaperTrade; showCapital?: boolean }) {
-  const pnl = t.netPnl ?? 0;
-  const exitReasonCls =
-    t.exitReason === 'TRAIL_SL' ? 'text-yellow-400' :
-    t.exitReason === 'SL'       ? 'text-red-400'    :
-    t.exitReason === 'EOD'      ? 'text-gray-400'   : 'text-gray-500';
-
-  return (
-    <div className="px-5 py-3 flex items-center gap-4 text-sm">
-      <div className="w-5">
-        {t.direction === 'CALL'
-          ? <TrendingUp className="w-4 h-4 text-emerald-400" />
-          : <TrendingDown className="w-4 h-4 text-red-400" />}
-      </div>
-      <div className="w-24">
-        <p className="text-white font-medium text-xs">{t.symbol === 'NIFTY 50' ? 'NIFTY' : 'BANKNIFTY'}</p>
-        <p className="text-gray-500 text-xs">{t.direction} {t.strike}</p>
-      </div>
-      <div className="w-20 text-xs text-gray-400">
-        <p>{istDate(t.entryTime)}</p>
-        <p>{istTime(t.entryTime)}</p>
-      </div>
-      <div className="flex gap-3 flex-1 text-xs text-gray-400">
-        <span>Entry ₹{t.entryPremium}</span>
-        {t.exitPremium != null && <span>Exit ₹{t.exitPremium}</span>}
-        <span>×{t.lots} lot</span>
-        <span>VIX {t.vix?.toFixed(1)}</span>
-      </div>
-      {t.exitReason && (
-        <span className={`text-xs w-16 ${exitReasonCls}`}>{t.exitReason}</span>
-      )}
-      {t.regime && (
-        <span className={`text-xs w-14 ${t.regime === 'NORMAL' ? 'text-emerald-500' : t.regime === 'HIGH' ? 'text-yellow-500' : 'text-red-500'}`}>
-          {t.regime}
-        </span>
-      )}
-      {showCapital && t.capitalAfter != null && (
-        <span className="text-xs text-gray-600 w-20">→ ₹{t.capitalAfter.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-      )}
-      <div className={`w-20 text-right font-medium ${pnlCls(pnl)}`}>
-        {t.status === 'OPEN' ? <span className="text-blue-400 text-xs">OPEN</span> : fmt(pnl)}
-      </div>
-    </div>
   );
 }

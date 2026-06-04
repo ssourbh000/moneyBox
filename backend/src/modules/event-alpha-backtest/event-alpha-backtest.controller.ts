@@ -9,8 +9,8 @@ export class EventAlphaBacktestController {
   constructor(private svc: EventAlphaBacktestService) {}
 
   @Post('run')
-  run(@CurrentUser() user: any, @Body() body: { fromDate: string; toDate: string }) {
-    return this.svc.run(user._id.toString(), body.fromDate, body.toDate);
+  run(@CurrentUser() user: any, @Body() body: { fromDate: string; toDate: string; initialCapital?: number }) {
+    return this.svc.run(user._id.toString(), body.fromDate, body.toDate, body.initialCapital);
   }
 
   @Get('list')

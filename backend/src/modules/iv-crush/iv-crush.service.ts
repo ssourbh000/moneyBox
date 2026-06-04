@@ -4,63 +4,33 @@ import { Model } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
 import { MarketBar, MarketBarDocument } from '../market-data/schemas/market-bar.schema';
 import { IVCrushTrade, IVCrushTradeDocument } from './schemas/iv-crush-trade.schema';
+import {
+  atmStraddle, tFromTimestamp, todayKeyIST,
+  istHHMM, RISK_FREE, upsertSkippedTrade,
+} from '../strategies/option-indicators';
+import { computeTradeSummary } from '../backtest-shared/metrics.util';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+export interface BtTrade {
+  date: string;
+  entryStraddle: number;
+  exitStraddle: number;
+  lots: number;
+  netPnl: number;
+  exitReason: 'TP' | 'SL' | 'TIME';
+  vix: number;
+  gapPct: number;
+  spot: number;
+  strike: number;
+}
+
 const LOT_SIZE    = 25;
 const MAX_RISK    = 5_000;
 const BROKERAGE   = 80;        // per lot per leg
-const RISK_FREE   = 0.065;
 const GAP_FILTER  = 0.8;       // % — skip if overnight gap > this
 const TP_PCT      = 0.15;      // exit when straddle decays 15%
 const SL_PCT      = 1.0;       // exit when straddle doubles
 const MORNING_IV_PREMIUM = 1.08; // entry IV = VIX × 1.08
-
-// ── B-S helpers ───────────────────────────────────────────────────────────────
-
-function normCDF(x: number): number {
-  const t = 1 / (1 + 0.2316419 * Math.abs(x));
-  const poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-  const result = 1 - (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * x * x) * poly;
-  return x >= 0 ? result : 1 - result;
-}
-
-function bsPrice(S: number, K: number, T: number, r: number, sigma: number, type: 'call' | 'put'): number {
-  if (T <= 0) return Math.max(type === 'call' ? S - K : K - S, 0);
-  const sqT = Math.sqrt(T);
-  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqT);
-  const d2 = d1 - sigma * sqT;
-  if (type === 'call') return S * normCDF(d1) - K * Math.exp(-r * T) * normCDF(d2);
-  return K * Math.exp(-r * T) * normCDF(-d2) - S * normCDF(-d1);
-}
-
-function daysToNextThursday(date: Date): number {
-  const day = date.getUTCDay();
-  if (day === 4) return 0;
-  return day < 4 ? 4 - day : 7 - (day - 4);
-}
-
-function tFromTimestamp(ts: Date): number {
-  const closeUTC = new Date(ts);
-  closeUTC.setUTCHours(10, 0, 0, 0);
-  const minsRemaining = Math.max(0, (closeUTC.getTime() - ts.getTime()) / 60_000);
-  return (daysToNextThursday(ts) + minsRemaining / (24 * 60)) / 365;
-}
-
-function atmStraddle(S: number, T: number, sigma: number): number {
-  const K = Math.round(S / 50) * 50;
-  return bsPrice(S, K, T, RISK_FREE, sigma, 'call') + bsPrice(S, K, T, RISK_FREE, sigma, 'put');
-}
-
-// IST hhmm as number (e.g. 920 = 9:20 AM)
-function istHHMM(ts: Date): number {
-  const ist = new Date(ts.getTime() + 330 * 60_000);
-  return ist.getUTCHours() * 100 + ist.getUTCMinutes();
-}
-
-function todayKeyIST(ts: Date): string {
-  const ist = new Date(ts.getTime() + 330 * 60_000);
-  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
-}
 
 // ── Last-tick diagnostic ──────────────────────────────────────────────────────
 
@@ -269,11 +239,7 @@ export class IVCrushService {
   }
 
   private async createSkipped(dk: string, reason: string) {
-    await this.tradeModel.findOneAndUpdate(
-      { date: dk },
-      { date: dk, status: 'SKIPPED', skipReason: reason },
-      { upsert: true, new: true },
-    );
+    await upsertSkippedTrade(this.tradeModel, dk, reason);
   }
 
   // ── Controller methods ────────────────────────────────────────────────────
@@ -298,23 +264,204 @@ export class IVCrushService {
 
   async getSummary(days = 30) {
     const trades = await this.getRecent(days);
-    const closed = trades.filter(t => t.status === 'CLOSED');
-    const wins   = closed.filter(t => t.netPnl > 0);
-    const losses = closed.filter(t => t.netPnl <= 0);
-    const netPnl = closed.reduce((s, t) => s + (t.netPnl ?? 0), 0);
-    const grossWin = wins.reduce((s, t) => s + (t.netPnl ?? 0), 0);
-    const grossLoss = Math.abs(losses.reduce((s, t) => s + (t.netPnl ?? 0), 0));
+    return computeTradeSummary(trades);
+  }
+
+  // ── Backtest ──────────────────────────────────────────────────────────────
+
+  async runBacktest(_userId: string, fromDate: string, toDate: string, initialCapital = 100_000) {
+    const from = new Date(fromDate);
+    const to   = new Date(toDate);
+
+    // Load all 5-min NIFTY bars in range
+    const bars = await this.barModel
+      .find({
+        symbol: 'NIFTY 50',
+        exchange: 'NSE',
+        interval: '5minute',
+        timestamp: { $gte: from, $lte: to },
+      })
+      .sort({ timestamp: 1 })
+      .lean();
+
+    if (!bars.length) {
+      return { trades: [], metrics: this.emptyMetrics(initialCapital) };
+    }
+
+    // Load VIX daily bars
+    const vixBars = await this.barModel
+      .find({ symbol: 'INDIA VIX', exchange: 'NSE', interval: 'day' })
+      .sort({ timestamp: 1 })
+      .lean();
+    const vixMap = new Map<string, number>();
+    for (const v of vixBars) {
+      vixMap.set(v.timestamp.toISOString().slice(0, 10), v.close);
+    }
+
+    // Group bars by trading day
+    const dayMap = new Map<string, typeof bars>();
+    for (const bar of bars) {
+      const dk = todayKeyIST(bar.timestamp);
+      if (!dayMap.has(dk)) dayMap.set(dk, []);
+      dayMap.get(dk)!.push(bar);
+    }
+
+    const tradeDays = [...dayMap.keys()].sort();
+    const btTrades: BtTrade[] = [];
+
+    for (let i = 0; i < tradeDays.length; i++) {
+      const dk      = tradeDays[i];
+      const dayBars = dayMap.get(dk)!;
+
+      // Find entry bar at 9:20 AM
+      const entryBar = dayBars.find(b => istHHMM(b.timestamp) === 920);
+      if (!entryBar) continue;
+
+      const spot = entryBar.close;
+
+      // Gap filter: yesterday's last bar
+      let gapPct = 0;
+      if (i > 0) {
+        const prevDk   = tradeDays[i - 1];
+        const prevBars = dayMap.get(prevDk)!;
+        const prevClose = prevBars[prevBars.length - 1].close;
+        gapPct = Math.abs((spot - prevClose) / prevClose) * 100;
+        if (gapPct > GAP_FILTER) continue;
+      }
+
+      // VIX — use the value from the entry day or the day before
+      const vix = vixMap.get(dk) ?? vixMap.get(tradeDays[i - 1] ?? '') ?? 15;
+      const sigmaMorning = (vix / 100) * MORNING_IV_PREMIUM;
+      const sigmaNormal  = vix / 100;
+
+      // Price straddle at entry
+      const T0            = tFromTimestamp(entryBar.timestamp);
+      const entryStraddle = atmStraddle(spot, T0, sigmaMorning);
+      const lots          = Math.max(1, Math.floor(MAX_RISK / (entryStraddle * LOT_SIZE)));
+
+      // Simulate bars from 9:25 AM onwards until 10:00 AM exit
+      let exitStraddle = entryStraddle;
+      let exitReason: 'TP' | 'SL' | 'TIME' = 'TIME';
+
+      const simBars = dayBars.filter(b => {
+        const hhmm = istHHMM(b.timestamp);
+        return hhmm >= 925 && hhmm <= 1000;
+      });
+
+      for (const bar of simBars) {
+        const hhmm = istHHMM(bar.timestamp);
+        const T    = tFromTimestamp(bar.timestamp);
+        const cs   = atmStraddle(bar.close, T, sigmaNormal);
+
+        // TP: straddle decayed 15%
+        if (cs < entryStraddle * (1 - TP_PCT)) {
+          exitStraddle = cs;
+          exitReason   = 'TP';
+          break;
+        }
+
+        // SL: straddle doubled (SL_PCT = 1.0 means 100% increase)
+        if (cs > entryStraddle * (1 + SL_PCT)) {
+          exitStraddle = cs;
+          exitReason   = 'SL';
+          break;
+        }
+
+        // TIME: 10:00 AM or beyond → force exit
+        if (hhmm >= 1000) {
+          exitStraddle = cs;
+          exitReason   = 'TIME';
+          break;
+        }
+
+        // Last bar in window — TIME exit
+        exitStraddle = cs;
+      }
+
+      const grossPnl = (entryStraddle - exitStraddle) * lots * LOT_SIZE;
+      const netPnl   = Math.round(grossPnl - lots * BROKERAGE * 2);
+
+      btTrades.push({
+        date: dk,
+        entryStraddle: Math.round(entryStraddle * 100) / 100,
+        exitStraddle:  Math.round(exitStraddle  * 100) / 100,
+        lots,
+        netPnl,
+        exitReason,
+        vix: Math.round(vix * 100) / 100,
+        gapPct: Math.round(gapPct * 100) / 100,
+        spot: Math.round(spot),
+        strike: Math.round(spot / 50) * 50,
+      });
+    }
+
+    const metrics = this.computeBacktestMetrics(btTrades, initialCapital);
+    return { trades: btTrades, metrics };
+  }
+
+  private computeBacktestMetrics(
+    trades: Array<{ date: string; netPnl: number }>,
+    init: number,
+  ) {
+    if (!trades.length) return this.emptyMetrics(init);
+
+    const wins   = trades.filter(t => t.netPnl > 0);
+    const losses = trades.filter(t => t.netPnl <= 0);
+    const gp     = wins.reduce((s, t)   => s + t.netPnl, 0);
+    const gl     = Math.abs(losses.reduce((s, t) => s + t.netPnl, 0));
+
+    // Drawdown & equity curve
+    let equity = init, peak = init, maxDD = 0;
+    const equityCurve: { t: string; e: number }[] = [];
+    for (const t of [...trades].sort((a, b) => a.date.localeCompare(b.date))) {
+      equity += t.netPnl;
+      peak    = Math.max(peak, equity);
+      maxDD   = Math.max(maxDD, peak - equity);
+      equityCurve.push({ t: t.date, e: +equity.toFixed(2) });
+    }
+
+    // Sharpe
+    const RFDR = 0.065 / 252;
+    let re = init;
+    const dayReturns: number[] = [];
+    const dayPnl = new Map<string, number>();
+    trades.forEach(t => dayPnl.set(t.date, (dayPnl.get(t.date) ?? 0) + t.netPnl));
+    for (const [, p] of [...dayPnl.entries()].sort()) {
+      dayReturns.push(p / re - RFDR);
+      re += p;
+    }
+    const mean   = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    const stdDev = (a: number[]) => {
+      if (a.length < 2) return 0;
+      const m = mean(a);
+      return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1));
+    };
+    const sharpe = dayReturns.length > 1
+      ? +(mean(dayReturns) / (stdDev(dayReturns) || 1e-10) * Math.sqrt(252)).toFixed(2)
+      : 0;
 
     return {
-      total: closed.length,
-      wins: wins.length,
-      losses: losses.length,
-      skipped: trades.filter(t => t.status === 'SKIPPED').length,
-      winRate: closed.length ? Math.round((wins.length / closed.length) * 10000) / 100 : 0,
-      netPnl: Math.round(netPnl),
-      profitFactor: grossLoss > 0 ? Math.round((grossWin / grossLoss) * 100) / 100 : 999,
-      avgWin:  wins.length   ? Math.round(grossWin / wins.length) : 0,
-      avgLoss: losses.length ? Math.round(-grossLoss / losses.length) : 0,
+      totalTrades:  trades.length,
+      wins:         wins.length,
+      losses:       losses.length,
+      winRate:      +((wins.length / trades.length) * 100).toFixed(1),
+      netPnl:       +(gp - gl).toFixed(2),
+      profitFactor: gl > 0 ? +(gp / gl).toFixed(2) : 99,
+      avgWin:       wins.length   ? +(gp / wins.length).toFixed(2)   : 0,
+      avgLoss:      losses.length ? +(gl / losses.length).toFixed(2) : 0,
+      maxDrawdown:  +maxDD.toFixed(2),
+      sharpeRatio:  sharpe,
+      roi:          +(((gp - gl) / init) * 100).toFixed(2),
+      finalCapital: +(init + (gp - gl)).toFixed(2),
+      equityCurve,
+    };
+  }
+
+  private emptyMetrics(init: number) {
+    return {
+      totalTrades: 0, wins: 0, losses: 0, winRate: 0, netPnl: 0,
+      profitFactor: 0, avgWin: 0, avgLoss: 0, maxDrawdown: 0,
+      sharpeRatio: 0, roi: 0, finalCapital: init, equityCurve: [],
     };
   }
 }

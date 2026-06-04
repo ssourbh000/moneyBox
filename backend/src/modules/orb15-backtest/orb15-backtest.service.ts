@@ -8,6 +8,7 @@ import {
   bsPrice, itmStrike, calcVWAP, calcSupertrend, calcORB,
   istHHMM, istDayOfWeek, isNewDay,
 } from '../strategies/option-indicators';
+import { computeMetrics, buildVixMap } from '../backtest-shared/metrics.util';
 
 // ── Strategy B v4: v3 + VIX Regime Mode ──────────────────────────────────────
 //
@@ -74,25 +75,6 @@ interface OpenO15Trade {
   trailSL: boolean; peakPremium: number; vix: number; meta: Record<string, number | string>;
 }
 
-function mean(a: number[]) { return a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0; }
-function stdDev(a: number[]) {
-  if (a.length < 2) return 0; const m = mean(a);
-  return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1));
-}
-
-function computeMetrics(trades: O15Trade[], init: number) {
-  if (!trades.length) return { totalTrades: 0, wins: 0, losses: 0, winRate: 0, netPnl: 0, grossProfit: 0, grossLoss: 0, profitFactor: 0, avgWin: 0, avgLoss: 0, expectancy: 0, maxDrawdown: 0, sharpeRatio: 0, roi: 0, finalCapital: init };
-  const wins = trades.filter(t => t.netPnl > 0), losses = trades.filter(t => t.netPnl <= 0);
-  const gp = wins.reduce((s, t) => s + t.netPnl, 0), gl = Math.abs(losses.reduce((s, t) => s + t.netPnl, 0));
-  let eq = init, pk = init, dd = 0;
-  for (const t of [...trades].sort((a, b) => a.exitTime.localeCompare(b.exitTime))) { eq += t.netPnl; pk = Math.max(pk, eq); dd = Math.max(dd, pk - eq); }
-  const dayPnl = new Map<string, number>();
-  trades.forEach(t => dayPnl.set(t.exitTime.slice(0, 10), (dayPnl.get(t.exitTime.slice(0, 10)) ?? 0) + t.netPnl));
-  const RFDR = 0.065 / 252; let re = init; const dr: number[] = [];
-  for (const [, p] of [...dayPnl.entries()].sort()) { dr.push(p / re - RFDR); re += p; }
-  const sh = dr.length > 1 ? +(mean(dr) / (stdDev(dr) || 1e-10) * Math.sqrt(252)).toFixed(2) : 0;
-  return { totalTrades: trades.length, wins: wins.length, losses: losses.length, winRate: +((wins.length / trades.length) * 100).toFixed(1), netPnl: +(gp - gl).toFixed(2), grossProfit: +gp.toFixed(2), grossLoss: +gl.toFixed(2), profitFactor: gl > 0 ? +(gp / gl).toFixed(2) : 99, avgWin: wins.length ? +(gp / wins.length).toFixed(2) : 0, avgLoss: losses.length ? +(gl / losses.length).toFixed(2) : 0, expectancy: +((gp - gl) / trades.length).toFixed(2), maxDrawdown: +dd.toFixed(2), sharpeRatio: sh, roi: +(((gp - gl) / init) * 100).toFixed(2), finalCapital: +(init + (gp - gl)).toFixed(2) };
-}
 
 @Injectable()
 export class Orb15BacktestService {
@@ -103,9 +85,9 @@ export class Orb15BacktestService {
     private marketData: MarketDataService,
   ) {}
 
-  async run(userId: string, fromDate: string, toDate: string) {
-    const record = await this.runModel.create({ userId: new Types.ObjectId(userId), fromDate: new Date(fromDate), toDate: new Date(toDate), status: O15Status.QUEUED });
-    void this.execute(record._id.toString(), fromDate, toDate);
+  async run(userId: string, fromDate: string, toDate: string, initialCapital = 100_000) {
+    const record = await this.runModel.create({ userId: new Types.ObjectId(userId), fromDate: new Date(fromDate), toDate: new Date(toDate), status: O15Status.QUEUED, startingCapital: initialCapital });
+    void this.execute(record._id.toString(), fromDate, toDate, initialCapital);
     return record;
   }
 
@@ -118,20 +100,18 @@ export class Orb15BacktestService {
   async simulateTrades(fromDate: string, toDate: string): Promise<(O15Trade & { _strategy: 'ORB' })[]> {
     const from = new Date(fromDate), to = new Date(toDate);
     const vixBars = await this.marketData.getCandles('INDIA VIX', 'NSE', 'day', from, to);
-    const vixMap = new Map<string, number>();
-    for (const v of vixBars) vixMap.set(v.timestamp.toISOString().slice(0, 10), v.close);
+    const vixMap = buildVixMap(vixBars);
     const all: O15Trade[] = [];
     for (const inst of INSTRUMENTS) all.push(...await this.simulateInstrument(inst, from, to, vixMap));
     return all.map(t => ({ ...t, _strategy: 'ORB' as const }));
   }
 
-  private async execute(runId: string, fromDate: string, toDate: string) {
+  private async execute(runId: string, fromDate: string, toDate: string, initialCapital = 100_000) {
     await this.runModel.findByIdAndUpdate(runId, { status: O15Status.RUNNING });
     try {
       const from = new Date(fromDate), to = new Date(toDate);
       const vixBars = await this.marketData.getCandles('INDIA VIX', 'NSE', 'day', from, to);
-      const vixMap = new Map<string, number>();
-      for (const v of vixBars) vixMap.set(v.timestamp.toISOString().slice(0, 10), v.close);
+      const vixMap = buildVixMap(vixBars);
       const allTrades: O15Trade[] = [];
       for (const inst of INSTRUMENTS) {
         const trades = await this.simulateInstrument(inst, from, to, vixMap);
@@ -139,10 +119,10 @@ export class Orb15BacktestService {
         this.logger.log(`ORB45 ${inst.symbol}: ${trades.length} trades`);
       }
       allTrades.sort((a, b) => a.entryTime.localeCompare(b.entryTime));
-      let equity = 1_000_000;
+      let equity = initialCapital;
       const equityCurve: { t: string; e: number }[] = [];
       for (const t of [...allTrades].sort((a, b) => a.exitTime.localeCompare(b.exitTime))) { equity += t.netPnl; equityCurve.push({ t: t.exitTime.slice(0, 10), e: +equity.toFixed(2) }); }
-      await this.runModel.findByIdAndUpdate(runId, { status: O15Status.COMPLETED, metrics: { ...computeMetrics(allTrades, 1_000_000), equityCurve }, trades: allTrades });
+      await this.runModel.findByIdAndUpdate(runId, { status: O15Status.COMPLETED, metrics: { ...computeMetrics(allTrades, initialCapital), equityCurve }, trades: allTrades });
     } catch (err: any) {
       this.logger.error(`Orb15Backtest ${runId} failed: ${err.message}`);
       await this.runModel.findByIdAndUpdate(runId, { status: O15Status.FAILED, errorMessage: err.message });

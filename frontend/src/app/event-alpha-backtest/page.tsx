@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AppShell from '@/components/layout/AppShell';
 import EquityChart from '@/components/charts/EquityChart';
 import { Zap, Play, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { eventAlphaBacktestService } from '@/services/event-alpha-backtest.service';
 import type { OBRun } from '@/services/option-backtest.service';
-
-const TWO_YEARS_AGO = new Date(Date.now() - 2 * 365 * 86_400_000).toISOString().slice(0, 10);
-const TODAY         = new Date().toISOString().slice(0, 10);
+import MetricCard from '@/components/ui/MetricCard';
+import RunStatusBadge from '@/components/ui/RunStatusBadge';
+import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 
 type ExitReason = 'TP' | 'SL' | 'TIME_SL' | 'EOD';
 
@@ -28,30 +28,6 @@ interface EATrade {
   vix: number;
   gapPct: number;
   meta: Record<string, string | number>;
-}
-
-function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="bg-gray-800 rounded-lg p-4">
-      <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className="text-lg font-bold text-white">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    COMPLETED: 'bg-green-800 text-green-200',
-    RUNNING:   'bg-yellow-800 text-yellow-200',
-    QUEUED:    'bg-gray-700 text-gray-300',
-    FAILED:    'bg-red-800 text-red-200',
-  };
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] ?? 'bg-gray-700 text-gray-300'}`}>
-      {status}
-    </span>
-  );
 }
 
 const REASON_COLOR: Record<ExitReason, string> = {
@@ -116,10 +92,13 @@ function TradeRow({ t }: { t: EATrade }) {
 export default function EventAlphaBacktestPage() {
   const [fromDate, setFromDate] = useState(TWO_YEARS_AGO);
   const [toDate,   setToDate]   = useState(TODAY);
+  const [capital,  setCapital]  = useState('100000');
+  const [customCap, setCustomCap] = useState('');
   const [runs,     setRuns]     = useState<OBRun[]>([]);
   const [selected, setSelected] = useState<OBRun | null>(null);
   const [loading,  setLoading]  = useState(false);
   const [status,   setStatus]   = useState('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadRuns = async () => {
     try { setRuns(await eventAlphaBacktestService.list()); } catch { /* ignore */ }
@@ -127,23 +106,28 @@ export default function EventAlphaBacktestPage() {
 
   useEffect(() => { loadRuns(); }, []);
 
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
   const handleRun = async () => {
     setLoading(true);
     setStatus('Backtest queued…');
     try {
-      const run = await eventAlphaBacktestService.run(fromDate, toDate);
+      const resolvedCapital = capital === 'custom' ? (parseInt(customCap) || 100_000) : (parseInt(capital) || 100_000);
+      const run = await eventAlphaBacktestService.run(fromDate, toDate, resolvedCapital);
       setStatus('Running… auto-refreshing every 5s');
-      const poll = setInterval(async () => {
+      pollRef.current = setInterval(async () => {
         try {
           const updated = await eventAlphaBacktestService.get(run._id);
           if (updated.status === 'COMPLETED' || updated.status === 'FAILED') {
-            clearInterval(poll);
+            if (pollRef.current) clearInterval(pollRef.current);
             setLoading(false);
             setStatus(updated.status === 'COMPLETED' ? 'Completed' : `Failed: ${updated.errorMessage}`);
             await loadRuns();
             setSelected(updated);
           }
-        } catch { clearInterval(poll); setLoading(false); }
+        } catch { if (pollRef.current) clearInterval(pollRef.current); setLoading(false); }
       }, 5000);
     } catch (e: any) {
       setStatus(`Error: ${e.message}`);
@@ -214,6 +198,25 @@ export default function EventAlphaBacktestPage() {
               <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
                 className="bg-gray-700 text-white rounded px-3 py-1.5 text-sm border border-gray-600" />
             </div>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Capital</label>
+              <select value={capital} onChange={e => setCapital(e.target.value)}
+                className="bg-gray-700 text-white rounded px-3 py-1.5 text-sm border border-gray-600">
+                <option value="20000">₹20,000</option>
+                <option value="50000">₹50,000</option>
+                <option value="100000">₹1,00,000</option>
+                <option value="500000">₹5,00,000</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </div>
+            {capital === 'custom' && (
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Amount (₹)</label>
+                <input type="number" value={customCap} onChange={e => setCustomCap(e.target.value)}
+                  placeholder="e.g. 200000"
+                  className="bg-gray-700 text-white rounded px-3 py-1.5 text-sm border border-gray-600 w-36" />
+              </div>
+            )}
             <p className="text-xs text-gray-500 self-end pb-2">
               Requires 5-min data for NIFTY 50 + NIFTY BANK + INDIA VIX daily
             </p>
@@ -278,7 +281,7 @@ export default function EventAlphaBacktestPage() {
             {m.equityCurve?.length > 0 && (
               <div className="bg-gray-800 rounded-lg p-4">
                 <h2 className="text-sm font-semibold text-gray-300 mb-3">Equity Curve</h2>
-                <EquityChart data={m.equityCurve} initialCapital={1_000_000} />
+                <EquityChart data={m.equityCurve} initialCapital={m.finalCapital - m.netPnl} />
               </div>
             )}
 
@@ -335,7 +338,7 @@ export default function EventAlphaBacktestPage() {
                       </span>
                     )}
                     {r.metrics && <span className="text-xs text-gray-400">{r.metrics.totalTrades} trades</span>}
-                    <StatusBadge status={r.status} />
+                    <RunStatusBadge status={r.status} />
                   </div>
                 </div>
               ))}
