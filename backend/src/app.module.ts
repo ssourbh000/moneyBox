@@ -9,7 +9,6 @@ import { UsersModule } from './modules/users/users.module';
 import { BrokerModule } from './modules/broker/broker.module';
 import { MarketDataModule } from './modules/market-data/market-data.module';
 import { StrategiesModule } from './modules/strategies/strategies.module';
-import { BacktestModule } from './modules/backtest/backtest.module';
 import { ExecutionModule } from './modules/execution/execution.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { RiskModule } from './modules/risk/risk.module';
@@ -41,7 +40,6 @@ import { EventAlphaPaperModule } from './modules/event-alpha-paper/event-alpha-p
     BrokerModule,
     MarketDataModule,
     StrategiesModule,
-    BacktestModule,
     ExecutionModule,
     PortfolioModule,
     RiskModule,
