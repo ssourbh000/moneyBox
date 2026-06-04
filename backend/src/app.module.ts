@@ -23,6 +23,7 @@ import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 import { CryptoOrbModule } from './modules/crypto-orb/crypto-orb.module';
 import { StrategyEBacktestModule } from './modules/strategy-e-backtest/strategy-e-backtest.module';
+import { IVCrushModule } from './modules/iv-crush/iv-crush.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { StrategyEBacktestModule } from './modules/strategy-e-backtest/strategy-
     LiveSignalModule,
     CryptoOrbModule,
     StrategyEBacktestModule,
+    IVCrushModule,
   ],
 })
 export class AppModule {}
