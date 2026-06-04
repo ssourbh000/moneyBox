@@ -9,10 +9,15 @@ import MetricCard from '@/components/ui/MetricCard';
 import RunStatusBadge from '@/components/ui/RunStatusBadge';
 import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 
+// Minimum capital for B (First Light Fade) — option SELL, NIFTY 1 lot = 65 qty
+// SPAN + Exposure margin for 1 lot ATM straddle ≈ ₹2–2.5L depending on VIX
+const MIN_CAPITAL = 250_000;
+
 const CAPITAL_OPTIONS = [
   { label: '₹20k',   value: 20_000 },
   { label: '₹50k',   value: 50_000 },
   { label: '₹1L',    value: 100_000 },
+  { label: '₹2.5L',  value: 250_000 },
   { label: '₹5L',    value: 500_000 },
   { label: 'Custom', value: -1 },
 ];
@@ -105,6 +110,8 @@ export default function IVCrushBacktestPage() {
     capitalOption === -1
       ? parseInt(customCapital, 10) || 100_000
       : capitalOption;
+
+  const belowMinCapital = effectiveCapital < MIN_CAPITAL;
 
   const handleRun = async () => {
     setLoading(true);
@@ -203,14 +210,28 @@ export default function IVCrushBacktestPage() {
             )}
             <button
               onClick={handleRun}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded text-sm"
+              disabled={loading || belowMinCapital}
+              className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm"
             >
               {loading ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
               {loading ? 'Running…' : 'Run Backtest'}
             </button>
           </div>
-          {status && <p className="text-sm text-gray-400">{status}</p>}
+          {belowMinCapital && (
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5">
+              <span className="text-red-400 text-lg">⚠</span>
+              <div>
+                <p className="text-red-400 text-sm font-medium">
+                  Minimum ₹{MIN_CAPITAL.toLocaleString('en-IN')} required for this strategy
+                </p>
+                <p className="text-red-400/70 text-xs mt-0.5">
+                  B — First Light Fade sells an ATM straddle (option sell). SPAN + Exposure margin
+                  for 1 lot NIFTY (65 qty) is ~₹2–2.5L. Selected capital is insufficient.
+                </p>
+              </div>
+            </div>
+          )}
+          {status && !belowMinCapital && <p className="text-sm text-gray-400">{status}</p>}
         </div>
 
         {/* Results */}
