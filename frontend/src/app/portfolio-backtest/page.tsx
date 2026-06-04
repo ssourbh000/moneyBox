@@ -20,9 +20,9 @@ const STRATEGY_BG: Record<string, string> = {
   EVENT: 'bg-yellow-900 text-yellow-200',
 };
 const STRATEGY_LABEL: Record<string, string> = {
-  ORB:   'B — ORB Breakout',
-  C1:    'C1 — IV Crush',
-  EVENT: 'D — Event Alpha',
+  ORB:   'A — Breakout Rider',
+  C1:    'B — First Light Fade',
+  EVENT: 'C — Storm Chaser',
 };
 
 function pnlColor(v: number) { return v >= 0 ? 'text-green-400' : 'text-red-400'; }
@@ -179,18 +179,18 @@ export default function PortfolioBacktestPage() {
         <div className="flex items-center gap-3">
           <BarChart2 size={24} className="text-emerald-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">Portfolio Simulator — B + C1 + D</h1>
+            <h1 className="text-xl font-bold text-white">Portfolio Simulator — A + B + C</h1>
             <p className="text-sm text-gray-400">
-              Runs B (ORB) + C1 (IV Crush) + D (Event Alpha) together on shared capital
+              Runs A (Breakout Rider) + B (First Light Fade) + C (Storm Chaser) together on shared capital
             </p>
           </div>
         </div>
 
         {/* Strategy legend */}
         <div className="bg-gray-800 rounded-lg p-3 flex flex-wrap gap-3 text-xs">
-          <span className="bg-purple-900 text-purple-300 px-2 py-0.5 rounded">B — ORB Breakout (daily)</span>
-          <span className="bg-blue-900 text-blue-300 px-2 py-0.5 rounded">C1 — IV Crush (daily 9:20 AM)</span>
-          <span className="bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded">D — Event Alpha (event days)</span>
+          <span className="bg-purple-900 text-purple-300 px-2 py-0.5 rounded">A — Breakout Rider (daily)</span>
+          <span className="bg-blue-900 text-blue-300 px-2 py-0.5 rounded">B — First Light Fade (daily 9:20 AM)</span>
+          <span className="bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded">C — Storm Chaser (event days)</span>
           <span className="ml-auto text-gray-500">Non-overlapping — each strategy fills a different market regime</span>
         </div>
 

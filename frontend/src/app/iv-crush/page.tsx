@@ -158,7 +158,7 @@ export default function IVCrushPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">C1 — Opening IV Crush</h1>
+            <h1 className="text-2xl font-bold text-white">B — First Light Fade</h1>
             <p className="text-gray-500 text-sm mt-1">
               Sell ATM straddle at 9:20 AM · Exit by 10:00 AM · Gap filter 0.8% · Target 15% decay
             </p>

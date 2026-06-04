@@ -150,7 +150,7 @@ export default function EventAlphaBacktestPage() {
         <div className="flex items-center gap-3">
           <Zap size={24} className="text-yellow-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">Strategy D — Event Alpha</h1>
+            <h1 className="text-xl font-bold text-white">C — Storm Chaser</h1>
             <p className="text-sm text-gray-400">
               ATM Straddle · RBI / Budget / FOMC / VIX spike / Gap days · NIFTY + BankNifty
             </p>

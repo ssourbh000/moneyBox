@@ -232,7 +232,7 @@ export default function PaperTradingPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">B — 45-min ORB</h1>
+            <h1 className="text-2xl font-bold text-white">A — Breakout Rider</h1>
             <p className="text-gray-500 text-sm mt-1">
               45-min opening range · EMA direction · 10:00–14:00 · 3 trades/day
             </p>

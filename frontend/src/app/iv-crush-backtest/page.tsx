@@ -139,9 +139,9 @@ export default function IVCrushBacktestPage() {
         <div className="flex items-center gap-3">
           <Zap size={24} className="text-blue-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">C1 — IV Crush Backtest</h1>
+            <h1 className="text-xl font-bold text-white">B — First Light Fade</h1>
             <p className="text-sm text-gray-400">
-              Opening IV Crush · Sell ATM straddle at 9:20 AM · NIFTY 50
+              First Light Fade · Sell ATM straddle at 9:20 AM · NIFTY 50
             </p>
           </div>
         </div>

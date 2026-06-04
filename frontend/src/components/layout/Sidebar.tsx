@@ -26,7 +26,7 @@ import { authService } from '@/services/auth.service';
 const STRATEGIES = [
   {
     key: 'b',
-    label: 'B — 45-min ORB',
+    label: 'A — Breakout Rider',
     color: 'text-purple-400',
     dot: 'bg-purple-500',
     links: [
@@ -36,7 +36,7 @@ const STRATEGIES = [
   },
   {
     key: 'c1',
-    label: 'C1 — IV Crush',
+    label: 'B — First Light Fade',
     color: 'text-blue-400',
     dot: 'bg-blue-500',
     links: [
@@ -46,7 +46,7 @@ const STRATEGIES = [
   },
   {
     key: 'd',
-    label: 'D — Event Alpha',
+    label: 'C — Storm Chaser',
     color: 'text-yellow-400',
     dot: 'bg-yellow-500',
     links: [

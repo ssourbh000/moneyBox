@@ -108,7 +108,7 @@ export default function Orb15BacktestPage() {
         <div className="flex items-center gap-3">
           <Zap size={24} className="text-purple-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">Strategy B — 45-min ORB</h1>
+            <h1 className="text-xl font-bold text-white">A — Breakout Rider</h1>
             <p className="text-sm text-gray-400">
               Wide ORB (9 bars) · EMA direction · 10:00–14:00 · 3 trades/day
             </p>

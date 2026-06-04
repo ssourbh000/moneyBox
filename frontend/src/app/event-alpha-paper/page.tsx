@@ -172,7 +172,7 @@ export default function EventAlphaPaperPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">D — Event Alpha</h1>
+            <h1 className="text-2xl font-bold text-white">C — Storm Chaser</h1>
             <p className="text-gray-500 text-sm mt-1">
               Buy ATM straddle at 9:20 AM · Event days only (VIX &gt; 18 or gap &gt; 1.2%) · TP 100% · SL 50% · Exit 2:30 PM
             </p>

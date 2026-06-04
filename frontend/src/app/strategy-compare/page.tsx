@@ -13,7 +13,7 @@ import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 const STRATEGIES = [
   {
     key:      'orb15',
-    label:    'B — 45-min ORB',
+    label:    'A — Breakout Rider',
     subtitle: '45-min range · EMA direction · 10:00–14:00 · 3/day',
     endpoint: 'orb15-backtest',
     color:    'border-purple-500',
@@ -21,7 +21,7 @@ const STRATEGIES = [
   },
   {
     key:      'event-alpha',
-    label:    'D — Event Alpha',
+    label:    'C — Storm Chaser',
     subtitle: 'ATM straddle · VIX/gap events · 9:20–14:30 · 1/day',
     endpoint: 'event-alpha-backtest',
     color:    'border-yellow-500',
