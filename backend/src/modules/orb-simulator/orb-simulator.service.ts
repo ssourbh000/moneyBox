@@ -84,7 +84,9 @@ export class OrbSimulatorService {
     const rollingBars: OHLCV[] = [], rolling15: OHLCV[] = [];
     let bar15Idx = 0, orbHigh = 0, orbLow = 0, orbSet = false;
     let openTrade: OpenTrade | null = null;
-    let tradesOpenedToday = 0, lastTradeExitTime: Date | null = null;
+    let tradesOpenedToday = 0;
+    let lastSLExitTime: Date | null = null;         // cooldown only after failed SL
+    let blockedDirection: 'CALL' | 'PUT' | null = null; // direction blocked after SL hit
     let pdHigh = 0, pdLow = Infinity, dayHigh = 0, dayLow = Infinity;
     let prevDayClose = 0, todayOpen = 0, gapDir: 'UP' | 'DOWN' | 'NONE' = 'NONE';
 
@@ -104,7 +106,7 @@ export class OrbSimulatorService {
           const T = this.tte(prevBar.timestamp);
           const ep = bsPrice(prevBar.close, openTrade.strike, RISK_FREE_RATE, T, 0.15, openTrade.direction === 'CALL' ? 'call' : 'put');
           trades.push(this.mk(inst, openTrade, ep, prevBar.timestamp, 'EOD'));
-          openTrade = null; lastTradeExitTime = prevBar.timestamp;
+          openTrade = null; // EOD — no cooldown, no direction block
         }
         if (dayHigh > 0) { pdHigh = dayHigh; pdLow = dayLow; prevDayClose = prevBar?.close ?? 0; }
         todayOpen = bar.open;
@@ -114,7 +116,7 @@ export class OrbSimulatorService {
         }
         dayHigh = bar.high; dayLow = bar.low;
         sessionBars = []; orbSet = false; orbHigh = orbLow = 0;
-        tradesOpenedToday = 0; lastTradeExitTime = null;
+        tradesOpenedToday = 0; lastSLExitTime = null; blockedDirection = null;
       } else {
         dayHigh = Math.max(dayHigh, bar.high);
         dayLow  = Math.min(dayLow,  bar.low);
@@ -146,14 +148,31 @@ export class OrbSimulatorService {
         const contTrailSL = trailActive ? +(openTrade.peakPremium * (1 - p.trailPct)).toFixed(2) : openTrade.slPremium;
         if (trailActive && contTrailSL > openTrade.slPremium) { openTrade.slPremium = contTrailSL; openTrade.trailSL = true; }
         if (!openTrade.partialBooked && cp >= openTrade.entryPremium * PARTIAL_MULT) { openTrade.partialBooked = true; openTrade.lots = Math.max(1, Math.floor(openTrade.lots / 2)); }
-        if (cp <= openTrade.slPremium) { trades.push(this.mk(inst, openTrade, openTrade.slPremium, barDate, openTrade.trailSL ? 'TRAIL_SL' : 'SL')); lastTradeExitTime = barDate; openTrade = null; }
-        else if (hhmm >= EXIT_TIME) { trades.push(this.mk(inst, openTrade, cp, barDate, 'EOD')); lastTradeExitTime = barDate; openTrade = null; }
+        if (cp <= openTrade.slPremium) {
+          const reason = openTrade.trailSL ? 'TRAIL_SL' : 'SL';
+          trades.push(this.mk(inst, openTrade, openTrade.slPremium, barDate, reason));
+          const isFailedSL = reason === 'SL';
+          if (isFailedSL) {
+            lastSLExitTime = barDate;                                              // always track for legacy cooldown
+            if (p.directionBlock) blockedDirection = openTrade.direction;         // block direction if enabled
+          }
+          if (!p.smartCooldown) {
+            // Old behaviour: cooldown after any exit
+            lastSLExitTime = barDate;
+          }
+          openTrade = null;
+        } else if (hhmm >= EXIT_TIME) {
+          trades.push(this.mk(inst, openTrade, cp, barDate, 'EOD'));
+          if (!p.smartCooldown) lastSLExitTime = barDate; // old: cooldown after EOD too
+          openTrade = null;
+        }
         continue;
       }
 
       if (!orbSet || hhmm < ENTRY_FROM || hhmm > ENTRY_TO) continue;
       if (tradesOpenedToday >= maxTrades) continue;
-      if (lastTradeExitTime && barDate.getTime() - lastTradeExitTime.getTime() < COOLDOWN_MS) continue;
+      // Cooldown only after a failed SL (not after TRAIL_SL or EOD)
+      if (lastSLExitTime && barDate.getTime() - lastSLExitTime.getTime() < COOLDOWN_MS) continue;
       if (rollingBars.length < Math.max(EMA_SLOW, RSI_PERIOD, ST_PERIOD * 2) + 5) continue;
       if (regime === 'CRISIS' && gapDir === 'NONE') continue;
 
@@ -191,7 +210,11 @@ export class OrbSimulatorService {
         }
       }
 
-      const dir: 'CALL' | 'PUT' = callOk ? 'CALL' : 'PUT';
+      // Direction block (if enabled): SL on CALL blocks CALL for day, PUT still allowed
+      const effectiveCallOk = callOk && (!p.directionBlock || blockedDirection !== 'CALL');
+      const effectivePutOk  = putOk  && (!p.directionBlock || blockedDirection !== 'PUT');
+      if (!effectiveCallOk && !effectivePutOk) continue;
+      const dir: 'CALL' | 'PUT' = effectiveCallOk ? 'CALL' : 'PUT';
       const strike = itmStrike(bar.close, dir, inst.tickSize);
       const T = this.tte(barDate);
       const ep = bsPrice(bar.close, strike, RISK_FREE_RATE, T, vix / 100, dir === 'CALL' ? 'call' : 'put');

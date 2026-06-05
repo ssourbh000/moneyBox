@@ -248,6 +248,11 @@ export class LiveSignalService {
       if (now.getTime() - new Date(lastExit).getTime() < COOLDOWN_MS) return `${sym}: in 20-min cooldown`;
     }
 
+    // Direction block: if a fixed SL hit today, block that direction for rest of day
+    const slHitsToday = closedToday.filter(t => t.exitReason === 'SL');
+    const blockedDir = slHitsToday.length > 0 ? slHitsToday[slHitsToday.length - 1].direction : null;
+    if (blockedDir) this.logger.log(`${inst.symbol}: direction block active — ${blockedDir} blocked after SL hit`);
+
     // CRISIS regime: only trade with gap direction
     if (regime === 'CRISIS' && gapDir === 'NONE') return `${sym}: CRISIS regime requires gap direction`;
 
@@ -307,8 +312,15 @@ export class LiveSignalService {
       }
     }
 
+    // ── Direction block: apply before entry ──────────────────────────────────
+    const effectiveCallOk = callOk && blockedDir !== 'CALL';
+    const effectivePutOk  = putOk  && blockedDir !== 'PUT';
+    if (!effectiveCallOk && !effectivePutOk) {
+      return `${sym}: direction blocked — ${blockedDir} SL hit earlier today, no ${blockedDir} re-entry`;
+    }
+
     // ── Fire entry ────────────────────────────────────────────────────────────
-    const dir: 'CALL' | 'PUT' = callOk ? 'CALL' : 'PUT';
+    const dir: 'CALL' | 'PUT' = effectiveCallOk ? 'CALL' : 'PUT';
     const strike = itmStrike(bar.close, dir, inst.tickSize);
     const T = this.tte(now);
     const ep = bsPrice(bar.close, strike, RISK_FREE_RATE, T, vix / 100,

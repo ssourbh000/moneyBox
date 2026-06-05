@@ -15,6 +15,8 @@ interface Combo {
   slPct: number;
   trailTrigger: number;
   trailPct: number;
+  smartCooldown: boolean;
+  directionBlock: boolean;
 }
 
 interface Metrics {
@@ -43,10 +45,10 @@ interface ComboResult {
 // ── Default combos ────────────────────────────────────────────────────────────
 
 const DEFAULT_COMBOS: Combo[] = [
-  { id: 1, label: 'Conservative',  slPct: 10, trailTrigger: 20, trailPct: 10 },
-  { id: 2, label: 'Current (12/15/12)', slPct: 12, trailTrigger: 15, trailPct: 12 },
-  { id: 3, label: 'Balanced',      slPct: 15, trailTrigger: 20, trailPct: 15 },
-  { id: 4, label: 'Aggressive',    slPct: 20, trailTrigger: 25, trailPct: 15 },
+  { id: 1, label: 'Baseline (old rules)',      slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: false },
+  { id: 2, label: 'Smart Cooldown only',       slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: true,  directionBlock: false },
+  { id: 3, label: 'Direction Block only',      slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: true  },
+  { id: 4, label: 'Both rules (current live)', slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: true,  directionBlock: true  },
 ];
 
 const CAPITAL_OPTIONS = [
@@ -119,6 +121,18 @@ function ComboRow({ combo, result, onChange, onDelete, disabled }: {
         </div>
       </td>
       {/* Results */}
+      {/* Smart Cooldown toggle */}
+      <td className="py-3 px-2 text-center">
+        <input type="checkbox" checked={combo.smartCooldown}
+          onChange={e => onChange({ ...combo, smartCooldown: e.target.checked })}
+          className="accent-emerald-500 w-4 h-4 cursor-pointer" />
+      </td>
+      {/* Direction Block toggle */}
+      <td className="py-3 px-2 text-center">
+        <input type="checkbox" checked={combo.directionBlock}
+          onChange={e => onChange({ ...combo, directionBlock: e.target.checked })}
+          className="accent-purple-500 w-4 h-4 cursor-pointer" />
+      </td>
       {result.status === 'idle'    && <td colSpan={7} className="py-3 px-3 text-gray-600 text-sm">—</td>}
       {result.status === 'running' && <td colSpan={7} className="py-3 px-3"><RefreshCw size={14} className="animate-spin text-yellow-400" /></td>}
       {result.status === 'error'   && <td colSpan={7} className="py-3 px-3 text-red-400 text-xs">{result.error}</td>}
@@ -163,8 +177,8 @@ export default function OrbSimulatorPage() {
   };
   const addCombo = () => {
     const id = nextId;
-    const last = combos[combos.length - 1] ?? DEFAULT_COMBOS[1];
-    setCombos(cs => [...cs, { id, label: `Combo ${id}`, slPct: last.slPct, trailTrigger: last.trailTrigger, trailPct: last.trailPct }]);
+    const last = combos[combos.length - 1] ?? DEFAULT_COMBOS[3];
+    setCombos(cs => [...cs, { id, label: `Combo ${id}`, slPct: last.slPct, trailTrigger: last.trailTrigger, trailPct: last.trailPct, smartCooldown: last.smartCooldown, directionBlock: last.directionBlock }]);
     setResults(r => ({ ...r, [id]: { id, status: 'idle' } }));
     setNextId(n => n + 1);
   };
@@ -178,9 +192,11 @@ export default function OrbSimulatorPage() {
       try {
         const { data } = await api.post('/orb-simulator/run', {
           fromDate, toDate, capital,
-          slPct:        combo.slPct / 100,
-          trailTrigger: combo.trailTrigger / 100,
-          trailPct:     combo.trailPct / 100,
+          slPct:          combo.slPct / 100,
+          trailTrigger:   combo.trailTrigger / 100,
+          trailPct:       combo.trailPct / 100,
+          smartCooldown:  combo.smartCooldown,
+          directionBlock: combo.directionBlock,
         });
         setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'done', metrics: data.metrics } }));
       } catch (e: any) {
@@ -264,6 +280,8 @@ export default function OrbSimulatorPage() {
                 <th className="py-3 px-3">Fixed SL</th>
                 <th className="py-3 px-3">Trail After</th>
                 <th className="py-3 px-3">Trail %</th>
+                <th className="py-3 px-2 text-center" title="Cooldown only after fixed SL, not after TRAIL_SL/EOD">Smart CD</th>
+                <th className="py-3 px-2 text-center" title="Block same direction after SL hit">Dir Block</th>
                 <th className="py-3 px-3">Trades</th>
                 <th className="py-3 px-3">Win Rate</th>
                 <th className="py-3 px-3">Net P&L</th>
