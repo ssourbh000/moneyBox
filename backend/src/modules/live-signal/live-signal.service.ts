@@ -66,7 +66,7 @@ export class LiveSignalService {
   ) {}
 
   // ── Fires every 5 min, Mon–Fri, 3:00–9:59 UTC (= 8:30–15:30 IST) ──────────
-  @Cron('*/5 3-9 * * 1-5', { timeZone: 'UTC' })
+  @Cron('*/5 4-9 * * 1-5', { timeZone: 'UTC' })
   async tick() {
     const hhmm = istHHMM(new Date());
     if (hhmm < 915 || hhmm > EXIT_TIME) return;
