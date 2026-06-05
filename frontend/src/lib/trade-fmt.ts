@@ -80,6 +80,8 @@ export const TICK_STATUS_CLS: Record<string, string> = {
   CLOSED:         'text-emerald-400',
   SKIPPED:        'text-gray-500',
   WAITING:        'text-blue-400',
+  PRE_EVENT:      'text-orange-400',
+  PRE_CHECK:      'text-gray-400',
   ERROR:          'text-red-400',
   OUTSIDE_WINDOW: 'text-gray-600',
 };

@@ -57,8 +57,14 @@ export class EventAlphaPaperService {
     const hhmm = istHHMM(now);
     const dk = todayKeyIST(now);
 
+    // Pre-market check: 9:00–9:14 AM — check VIX from DB before market opens
+    if (hhmm >= 900 && hhmm < 915) {
+      await this.preMarketCheck(now, hhmm);
+      return;
+    }
+
     // Outside operating window
-    if (hhmm < 915 || hhmm > 1435) {
+    if (hhmm < 900 || hhmm > 1435) {
       this.lastTick = {
         time: now.toISOString(), istHHMM: hhmm,
         status: 'OUTSIDE_WINDOW',
@@ -88,7 +94,7 @@ export class EventAlphaPaperService {
         return;
       }
 
-      // Try entry between 9:20–9:35 AM
+      // Try entry between 9:20–9:40 AM
       if (hhmm >= 920 && hhmm <= 940) {
         await this.tryEntry(dk, now);
       } else {
@@ -101,6 +107,38 @@ export class EventAlphaPaperService {
     } catch (err: any) {
       this.logger.error(`Event Alpha tick error: ${err.message}`);
       this.lastTick = { time: now.toISOString(), istHHMM: hhmm, status: 'ERROR', message: err.message };
+    }
+  }
+
+  private async preMarketCheck(now: Date, hhmm: number) {
+    try {
+      const todayOpen = new Date(now);
+      todayOpen.setUTCHours(3, 45, 0, 0); // 9:15 IST
+
+      // Check yesterday's VIX from DB (no API call needed)
+      const vixBar = await this.barModel
+        .findOne({ symbol: 'INDIA VIX', exchange: 'NSE', interval: 'day', timestamp: { $lt: todayOpen } })
+        .sort({ timestamp: -1 }).lean();
+      const prevVix = vixBar ? vixBar.close : 0;
+
+      const isVixEvent = prevVix > VIX_THRESH;
+
+      if (isVixEvent) {
+        this.logger.log(`Storm Chaser PRE-MARKET: VIX ${prevVix.toFixed(1)} > ${VIX_THRESH} — EVENT DAY likely`);
+        this.lastTick = {
+          time: now.toISOString(), istHHMM: hhmm,
+          status: 'PRE_EVENT',
+          message: `⚡ EVENT DAY likely — VIX ${prevVix.toFixed(1)} > ${VIX_THRESH}. Waiting for gap confirmation at 9:22 AM.`,
+        };
+      } else {
+        this.lastTick = {
+          time: now.toISOString(), istHHMM: hhmm,
+          status: 'PRE_CHECK',
+          message: `Pre-market: VIX ${prevVix.toFixed(1)} ≤ ${VIX_THRESH}. No VIX event — will check gap at open.`,
+        };
+      }
+    } catch (err: any) {
+      this.logger.error(`Pre-market check error: ${err.message}`);
     }
   }
 
