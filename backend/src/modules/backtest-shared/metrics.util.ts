@@ -2,6 +2,18 @@ import { mean, stdDev } from '../strategies/indicators';
 
 interface MinTrade { netPnl: number; exitTime: string; }
 
+/**
+ * Tiered risk per trade based on capital size.
+ * Smaller accounts take higher % (to reach at least 1 lot),
+ * larger accounts take lower % (to manage drawdown).
+ */
+export function riskPerTrade(capital: number): number {
+  if (capital <= 20_000)  return capital * 0.10; // 10% → ₹2,000
+  if (capital <= 50_000)  return capital * 0.08; // 8%  → ₹4,000
+  if (capital <= 200_000) return capital * 0.05; // 5%  → ₹5,000–₹10,000
+  return capital * 0.04;                          // 4%  → ₹20,000+
+}
+
 export function computeMetrics(trades: MinTrade[], init: number) {
   if (!trades.length) return { totalTrades: 0, wins: 0, losses: 0, winRate: 0, netPnl: 0, grossProfit: 0, grossLoss: 0, profitFactor: 0, avgWin: 0, avgLoss: 0, expectancy: 0, maxDrawdown: 0, sharpeRatio: 0, roi: 0, finalCapital: init };
   const wins = trades.filter(t => t.netPnl > 0), losses = trades.filter(t => t.netPnl <= 0);

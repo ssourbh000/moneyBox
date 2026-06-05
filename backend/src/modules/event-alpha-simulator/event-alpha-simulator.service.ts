@@ -5,11 +5,11 @@ import { MarketBar, MarketBarDocument } from '../market-data/schemas/market-bar.
 import {
   atmStraddle, tFromTimestamp, todayKeyIST, istHHMM,
 } from '../strategies/option-indicators';
-import { buildVixMap, computeMetrics } from '../backtest-shared/metrics.util';
+import { buildVixMap, computeMetrics, riskPerTrade } from '../backtest-shared/metrics.util';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const LOT_SIZE  = 65;
-const MAX_RISK  = 5_000;
+// MAX_RISK computed per-run as 2% of capital
 const BROKERAGE = 80;   // per lot per leg
 
 // ── Params / result types ─────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ export class EventAlphaSimulatorService {
   ) {}
 
   async simulate(p: EventAlphaSimParams): Promise<SimResult> {
+    const MAX_RISK = riskPerTrade(p.capital);
     const from = new Date(p.fromDate);
     const to   = new Date(p.toDate);
     // Convert gapThresh fraction to percent (e.g. 0.012 → 1.2%)

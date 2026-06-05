@@ -4,7 +4,7 @@ import { Model } from 'mongoose';
 import { MarketBar, MarketBarDocument } from '../market-data/schemas/market-bar.schema';
 import { bsPrice, itmStrike, calcVWAP, calcSupertrend, calcORB, istHHMM, istDayOfWeek, isNewDay } from '../strategies/option-indicators';
 import { ema, rsi, adx, OHLCV } from '../strategies/indicators';
-import { buildVixMap, computeMetrics } from '../backtest-shared/metrics.util';
+import { buildVixMap, computeMetrics, riskPerTrade } from '../backtest-shared/metrics.util';
 import { SimParams } from './orb-simulator.controller';
 
 const INSTRUMENTS = [
@@ -13,7 +13,7 @@ const INSTRUMENTS = [
 ] as const;
 
 const RISK_FREE_RATE     = 0.07;
-const MAX_RISK_PER_TRADE = 4000;
+// MAX_RISK is computed per-run as 2% of capital (see run method)
 const PARTIAL_MULT       = 1.8;
 const ORB_BARS           = 9;
 const ENTRY_FROM         = 1000;
@@ -43,6 +43,8 @@ export class OrbSimulatorService {
   ) {}
 
   async run(p: SimParams) {
+    // Risk per trade = 2% of capital (min ₹2,000 so 1 lot is always possible)
+    (p as any)._riskPerTrade = riskPerTrade(p.capital);
     const from = new Date(p.fromDate), to = new Date(p.toDate);
     const vixBars = await this.barModel
       .find({ symbol: 'INDIA VIX', exchange: 'NSE', interval: 'day', timestamp: { $gte: from, $lte: to } })
@@ -234,7 +236,7 @@ export class OrbSimulatorService {
       const ep = bsPrice(bar.close, strike, RISK_FREE_RATE, T, vix / 100, dir === 'CALL' ? 'call' : 'put');
       if (ep < 10) continue;
       const slP = +(ep * (1 - p.slPct)).toFixed(2);
-      const lots = Math.max(1, Math.floor(MAX_RISK_PER_TRADE / ((ep - slP) * inst.lotSize)));
+      const lots = Math.max(1, Math.floor((p as any)._riskPerTrade / ((ep - slP) * inst.lotSize)));
       tradesOpenedToday++;
       openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), adx: +adxVal.toFixed(1), regime } };
     }

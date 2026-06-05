@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
   LayoutDashboard,
-  FlaskConical,
   FileText,
   Briefcase,
   ListOrdered,
@@ -14,7 +13,6 @@ import {
   Settings,
   Zap,
   LogOut,
-  GitCompare,
   ChevronDown,
   ChevronRight,
   TrendingUp,
@@ -30,8 +28,6 @@ const STRATEGIES = [
     color: 'text-purple-400',
     dot: 'bg-purple-500',
     links: [
-      { href: '/orb15-backtest',  label: 'Backtest',    icon: FlaskConical },
-      { href: '/orb-simulator',   label: 'SL Simulator', icon: BarChart2 },
       { href: '/paper-trading',   label: 'Paper Trade', icon: FileText },
     ],
   },
@@ -41,7 +37,6 @@ const STRATEGIES = [
     color: 'text-blue-400',
     dot: 'bg-blue-500',
     links: [
-      { href: '/iv-crush-backtest', label: 'Backtest',    icon: FlaskConical },
       { href: '/iv-crush',          label: 'Paper Trade', icon: FileText },
     ],
   },
@@ -51,7 +46,6 @@ const STRATEGIES = [
     color: 'text-yellow-400',
     dot: 'bg-yellow-500',
     links: [
-      { href: '/event-alpha-backtest', label: 'Backtest',    icon: FlaskConical },
       { href: '/event-alpha-paper',    label: 'Paper Trade', icon: FileText },
     ],
   },
@@ -66,7 +60,6 @@ const TOP_NAV = [
 const TOOLS_NAV = [
   { href: '/portfolio-backtest', label: 'Portfolio Sim',      icon: BarChart2 },
   { href: '/unified-simulator',  label: 'Unified Simulator',  icon: BarChart2 },
-  { href: '/strategy-compare',   label: 'Strategy Compare',   icon: GitCompare },
 ];
 
 const TRADING_NAV = [

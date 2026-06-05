@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AppShell from '@/components/layout/AppShell';
 import EquityChart from '@/components/charts/EquityChart';
 import { Play, Plus, Trash2, RefreshCw, Trophy, ChevronDown, ChevronUp, Layers } from 'lucide-react';
@@ -58,10 +58,16 @@ interface StrategyMetrics {
   trades?: Array<{ exitTime: string; pnl: number }>;
 }
 
+interface StrategyResult {
+  params?: any;
+  metrics: StrategyMetrics;
+  trades?: Array<{ exitTime?: string; date?: string; netPnl: number; [key: string]: any }>;
+}
+
 interface ComboResultData {
-  a?: StrategyMetrics;
-  b?: StrategyMetrics;
-  c?: StrategyMetrics;
+  a?: StrategyResult;
+  b?: StrategyResult;
+  c?: StrategyResult;
 }
 
 interface CombinedMetrics {
@@ -86,10 +92,15 @@ interface ComboResult {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// B — First Light Fade is an option SELL strategy requiring SPAN + Exposure margin
+// 1 lot NIFTY straddle (65 qty) at ~₹23,500: SPAN ~₹1,36,000 + Exposure ~₹30,000 + buffer
+const MIN_CAPITAL_B = 200_000;
+
 const CAPITAL_OPTIONS = [
   { label: '₹20k',  value: 20_000 },
   { label: '₹50k',  value: 50_000 },
   { label: '₹1L',   value: 100_000 },
+  { label: '₹2L',   value: 200_000 },
   { label: '₹2.5L', value: 250_000 },
   { label: '₹5L',   value: 500_000 },
 ];
@@ -111,20 +122,24 @@ function pct(v: number) { return v.toFixed(1) + '%'; }
 
 /** Compute combined metrics from raw per-strategy results */
 function computeCombined(data: ComboResultData, capital: number): CombinedMetrics {
-  // Collect all trades from each selected strategy, tagged with exitTime
   const allTrades: Array<{ exitTime: string; pnl: number }> = [];
 
-  for (const m of [data.a, data.b, data.c]) {
-    if (!m) continue;
-    if (m.trades) {
-      allTrades.push(...m.trades);
-    } else if (m.equityCurve) {
-      // Synthesise trades from equity curve deltas if trades not provided
-      for (let i = 1; i < m.equityCurve.length; i++) {
-        const delta = m.equityCurve[i].e - m.equityCurve[i - 1].e;
-        if (delta !== 0) {
-          allTrades.push({ exitTime: m.equityCurve[i].t, pnl: delta });
+  for (const result of [data.a, data.b, data.c]) {
+    if (!result) continue;
+    if (result.trades?.length) {
+      // Use actual trade netPnl — B trades use 'date', A trades use 'exitTime'
+      for (const t of result.trades) {
+        const exitTime = t.exitTime ?? (t.date ? `${t.date}T04:30:00.000Z` : '');
+        if (exitTime && t.netPnl != null && !isNaN(t.netPnl)) {
+          allTrades.push({ exitTime, pnl: t.netPnl });
         }
+      }
+    } else if (result.metrics?.equityCurve?.length) {
+      // Fallback: derive from equity curve deltas
+      const ec = result.metrics.equityCurve;
+      for (let i = 1; i < ec.length; i++) {
+        const delta = ec[i].e - ec[i - 1].e;
+        if (!isNaN(delta)) allTrades.push({ exitTime: ec[i].t, pnl: delta });
       }
     }
   }
@@ -323,9 +338,10 @@ function ComboCard({ combo, result, capital, onChange, onDelete, disabled }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const m = result.combined;
+  const belowMinB = combo.b && capital < MIN_CAPITAL_B;
 
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700">
+    <div className={`bg-gray-800 rounded-lg border ${belowMinB ? 'border-red-500/40' : 'border-gray-700'}`}>
       {/* Header row */}
       <div className="flex items-center gap-2 px-4 py-3">
         {/* Label */}
@@ -392,6 +408,20 @@ function ComboCard({ combo, result, capital, onChange, onDelete, disabled }: {
           {combo.a && <AParamsPanel params={combo.aParams} onChange={p => onChange({ ...combo, aParams: p })} />}
           {combo.b && <BParamsPanel params={combo.bParams} onChange={p => onChange({ ...combo, bParams: p })} />}
           {combo.c && <CParamsPanel params={combo.cParams} onChange={p => onChange({ ...combo, cParams: p })} />}
+          {belowMinB && (
+            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5 mt-1">
+              <span className="text-red-400 text-base leading-none mt-0.5">⚠</span>
+              <div>
+                <p className="text-red-400 text-xs font-medium">
+                  Minimum ₹{MIN_CAPITAL_B.toLocaleString('en-IN')} required for B — First Light Fade
+                </p>
+                <p className="text-red-400/70 text-xs mt-0.5">
+                  Option SELL strategy — requires SPAN + Exposure margin for 1 lot NIFTY straddle (65 qty).
+                  Selected capital ₹{capital.toLocaleString('en-IN')} is insufficient for live trading.
+                </p>
+              </div>
+            </div>
+          )}
           {!combo.a && !combo.b && !combo.c && (
             <p className="text-xs text-gray-600 py-2">Select at least one strategy (A, B, or C) above.</p>
           )}
@@ -413,7 +443,13 @@ export default function UnifiedSimulatorPage() {
   );
   const [running,    setRunning]    = useState(false);
   const [nextId,     setNextId]     = useState(5);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId,  setExpandedId]  = useState<number | null>(null);
+  const [pastRuns,    setPastRuns]    = useState<any[]>([]);
+  const [selectedRun, setSelectedRun] = useState<any | null>(null);
+
+  useEffect(() => {
+    api.get('/unified-simulator/list').then(r => setPastRuns(r.data)).catch(() => {});
+  }, []);
 
   const updateCombo = (updated: Combo) => setCombos(cs => cs.map(c => c.id === updated.id ? updated : c));
   const deleteCombo = (id: number) => {
@@ -490,14 +526,17 @@ export default function UnifiedSimulatorPage() {
     }));
 
     setRunning(false);
+    // Refresh past runs list
+    api.get('/unified-simulator/list').then(r => setPastRuns(r.data)).catch(() => {});
   };
 
   const doneResults = combos
     .filter(c => results[c.id]?.status === 'done' && results[c.id]?.combined)
     .map(c => ({ combo: c, combined: results[c.id].combined! }));
 
-  const scored = doneResults.map(r => ({ ...r, score: score(r.combined) }));
+  const scored = doneResults.map(r => ({ ...r, score: r.combined ? score(r.combined) : 0 }));
   const best = scored.length ? scored.reduce((a, b) => b.score > a.score ? b : a) : null;
+  const hasCapitalViolation = combos.some(c => c.b && capital < MIN_CAPITAL_B);
 
   return (
     <AppShell>
@@ -540,12 +579,22 @@ export default function UnifiedSimulatorPage() {
               {CAPITAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <button onClick={runAll} disabled={running || combos.length === 0}
-            className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded text-sm font-semibold ml-auto">
+          <button onClick={runAll} disabled={running || combos.length === 0 || hasCapitalViolation}
+            className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-semibold ml-auto">
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
             {running ? `Running ${combos.length} combos…` : `▶ Run All (${combos.length})`}
           </button>
         </div>
+        {hasCapitalViolation && (
+          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 -mt-2">
+            <span className="text-red-400 text-lg">⚠</span>
+            <p className="text-red-400 text-sm">
+              One or more combos include <b>B — First Light Fade</b> but capital is below the minimum
+              <b> ₹{MIN_CAPITAL_B.toLocaleString('en-IN')}</b> required for live NIFTY straddle selling.
+              Increase capital or remove B from those combos to proceed.
+            </p>
+          </div>
+        )}
 
         {/* Winner banner */}
         {best && (
@@ -706,6 +755,70 @@ export default function UnifiedSimulatorPage() {
         )}
 
       </div>
+        {/* Previous Runs */}
+        {pastRuns.length > 0 && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h2 className="text-sm font-semibold text-gray-300 mb-3">Previous Runs</h2>
+            <div className="space-y-2">
+              {pastRuns.map(run => (
+                <div
+                  key={run._id}
+                  onClick={async () => {
+                    if (selectedRun?._id === run._id) { setSelectedRun(null); return; }
+                    const full = await api.get(`/unified-simulator/${run._id}`).then(r => r.data);
+                    setSelectedRun(full);
+                  }}
+                  className={`flex items-center justify-between p-3 rounded cursor-pointer transition-colors ${selectedRun?._id === run._id ? 'bg-emerald-900/30 border border-emerald-700/40' : 'bg-gray-750 hover:bg-gray-700'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-300">
+                      {new Date(run.fromDate).toLocaleDateString('en-IN')} → {new Date(run.toDate).toLocaleDateString('en-IN')}
+                    </span>
+                    <span className="text-xs text-gray-500">₹{run.capital.toLocaleString('en-IN')}</span>
+                    <div className="flex gap-1">
+                      {run.comboParams?.strategies?.a && <span className="text-xs bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded">A</span>}
+                      {run.comboParams?.strategies?.b && <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded">B</span>}
+                      {run.comboParams?.strategies?.c && <span className="text-xs bg-yellow-900 text-yellow-300 px-1.5 py-0.5 rounded">C</span>}
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-600">
+                    {new Date(run.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Selected run details */}
+            {selectedRun?.results && (
+              <div className="mt-4 pt-4 border-t border-gray-700 space-y-3">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Selected Run Results</p>
+                {Object.entries(selectedRun.results as Record<string, any>).map(([key, res]: [string, any]) => {
+                  const m = res?.metrics;
+                  if (!m) return null;
+                  const label = key === 'a' ? 'A — Breakout Rider' : key === 'b' ? 'B — First Light Fade' : 'C — Storm Chaser';
+                  const color = key === 'a' ? 'text-purple-400' : key === 'b' ? 'text-blue-400' : 'text-yellow-400';
+                  return (
+                    <div key={key} className="bg-gray-700/50 rounded-lg p-3">
+                      <p className={`text-xs font-semibold mb-2 ${color}`}>{label}</p>
+                      <div className="flex flex-wrap gap-4 text-xs text-gray-300">
+                        <span>{m.totalTrades} trades</span>
+                        <span className={m.winRate >= 65 ? 'text-emerald-400' : 'text-yellow-400'}>{m.winRate?.toFixed(1)}% WR</span>
+                        <span className={m.netPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {m.netPnl >= 0 ? '+' : ''}₹{m.netPnl?.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        </span>
+                        <span>PF {m.profitFactor?.toFixed(1)}</span>
+                        <span>Sharpe {m.sharpeRatio?.toFixed(2)}</span>
+                        <span className="text-red-400">DD ₹{m.maxDrawdown?.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                        <span className={m.roi >= 0 ? 'text-emerald-400' : 'text-red-400'}>{m.roi?.toFixed(1)}% ROI</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
     </AppShell>
   );
 }
