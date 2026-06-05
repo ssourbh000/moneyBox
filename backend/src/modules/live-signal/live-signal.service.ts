@@ -44,7 +44,8 @@ const RSI_BULL_CRISIS    = 65;
 const RSI_BEAR_CRISIS    = 35;
 const ADX_MIN_CRISIS     = 30;
 const MAX_TRADES_CRISIS  = 1;
-const MAX_TRADES_PER_DAY = 4;
+const MAX_TRADES_PER_DAY = 2;   // direction block makes >2 redundant
+const DAILY_LOSS_LIMIT   = 2_000; // hard stop across ALL instruments (₹2,000 = 10% of ₹20k)
 const COOLDOWN_MS        = 20 * 60 * 1000;
 const GAP_THRESHOLD      = 0.005;
 const VOL_SURGE          = 1.5;
@@ -246,6 +247,15 @@ export class LiveSignalService {
       const lastExit = closedToday.sort((a, b) =>
         new Date(b.exitTime!).getTime() - new Date(a.exitTime!).getTime())[0].exitTime!;
       if (now.getTime() - new Date(lastExit).getTime() < COOLDOWN_MS) return `${sym}: in 20-min cooldown`;
+    }
+
+    // Daily loss limit — cross-instrument hard stop (query ALL symbols, not just this one)
+    const allTodayTrades = await this.paperModel.find({ entryTime: { $gte: todayStartIST }, status: 'CLOSED' });
+    const totalDayLoss = allTodayTrades
+      .filter(t => (t.netPnl ?? 0) < 0)
+      .reduce((sum, t) => sum + Math.abs(t.netPnl ?? 0), 0);
+    if (totalDayLoss >= DAILY_LOSS_LIMIT) {
+      return `${sym}: daily loss limit hit (₹${totalDayLoss.toFixed(0)} ≥ ₹${DAILY_LOSS_LIMIT}) — no more trades today`;
     }
 
     // Direction block: if a fixed SL hit today, block that direction for rest of day

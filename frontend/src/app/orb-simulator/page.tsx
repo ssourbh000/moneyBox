@@ -17,6 +17,7 @@ interface Combo {
   trailPct: number;
   smartCooldown: boolean;
   directionBlock: boolean;
+  dailyLossLimit: number; // ₹ — 0 = disabled
 }
 
 interface Metrics {
@@ -45,10 +46,10 @@ interface ComboResult {
 // ── Default combos ────────────────────────────────────────────────────────────
 
 const DEFAULT_COMBOS: Combo[] = [
-  { id: 1, label: 'Baseline (old rules)',      slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: false },
-  { id: 2, label: 'Smart Cooldown only',       slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: true,  directionBlock: false },
-  { id: 3, label: 'Direction Block only',      slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: true  },
-  { id: 4, label: 'Both rules (current live)', slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: true,  directionBlock: true  },
+  { id: 1, label: 'Dir Block, no limit',    slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: true, dailyLossLimit: 0    },
+  { id: 2, label: 'Dir Block + ₹2,000 DLL', slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: true, dailyLossLimit: 2000 },
+  { id: 3, label: 'Dir Block + ₹3,000 DLL', slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: true, dailyLossLimit: 3000 },
+  { id: 4, label: 'Dir Block + ₹4,000 DLL', slPct: 12, trailTrigger: 15, trailPct: 12, smartCooldown: false, directionBlock: true, dailyLossLimit: 4000 },
 ];
 
 const CAPITAL_OPTIONS = [
@@ -133,6 +134,13 @@ function ComboRow({ combo, result, onChange, onDelete, disabled }: {
           onChange={e => onChange({ ...combo, directionBlock: e.target.checked })}
           className="accent-purple-500 w-4 h-4 cursor-pointer" />
       </td>
+      {/* Daily Loss Limit */}
+      <td className="py-3 px-3">
+        <input type="number" value={combo.dailyLossLimit} min={0} step={500}
+          onChange={e => onChange({ ...combo, dailyLossLimit: +e.target.value })}
+          placeholder="0=off"
+          className="bg-gray-700 text-white text-sm rounded px-2 py-1 w-20 border border-gray-600 text-center" />
+      </td>
       {result.status === 'idle'    && <td colSpan={7} className="py-3 px-3 text-gray-600 text-sm">—</td>}
       {result.status === 'running' && <td colSpan={7} className="py-3 px-3"><RefreshCw size={14} className="animate-spin text-yellow-400" /></td>}
       {result.status === 'error'   && <td colSpan={7} className="py-3 px-3 text-red-400 text-xs">{result.error}</td>}
@@ -178,7 +186,7 @@ export default function OrbSimulatorPage() {
   const addCombo = () => {
     const id = nextId;
     const last = combos[combos.length - 1] ?? DEFAULT_COMBOS[3];
-    setCombos(cs => [...cs, { id, label: `Combo ${id}`, slPct: last.slPct, trailTrigger: last.trailTrigger, trailPct: last.trailPct, smartCooldown: last.smartCooldown, directionBlock: last.directionBlock }]);
+    setCombos(cs => [...cs, { id, label: `Combo ${id}`, slPct: last.slPct, trailTrigger: last.trailTrigger, trailPct: last.trailPct, smartCooldown: last.smartCooldown, directionBlock: last.directionBlock, dailyLossLimit: last.dailyLossLimit }]);
     setResults(r => ({ ...r, [id]: { id, status: 'idle' } }));
     setNextId(n => n + 1);
   };
@@ -197,6 +205,7 @@ export default function OrbSimulatorPage() {
           trailPct:       combo.trailPct / 100,
           smartCooldown:  combo.smartCooldown,
           directionBlock: combo.directionBlock,
+          dailyLossLimit: combo.dailyLossLimit,
         });
         setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'done', metrics: data.metrics } }));
       } catch (e: any) {
@@ -282,6 +291,7 @@ export default function OrbSimulatorPage() {
                 <th className="py-3 px-3">Trail %</th>
                 <th className="py-3 px-2 text-center" title="Cooldown only after fixed SL, not after TRAIL_SL/EOD">Smart CD</th>
                 <th className="py-3 px-2 text-center" title="Block same direction after SL hit">Dir Block</th>
+                <th className="py-3 px-3" title="Hard stop across all instruments once day loss hits this">Daily Loss ₹</th>
                 <th className="py-3 px-3">Trades</th>
                 <th className="py-3 px-3">Win Rate</th>
                 <th className="py-3 px-3">Net P&L</th>

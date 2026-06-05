@@ -49,9 +49,12 @@ export class OrbSimulatorService {
       .sort({ timestamp: 1 }).lean();
     const vixMap = buildVixMap(vixBars);
 
+    // Shared daily loss tracker — cross-instrument hard stop
+    const dailyLossMap = new Map<string, number>(); // date → cumulative loss that day
+
     const allTrades: any[] = [];
     for (const inst of INSTRUMENTS) {
-      const trades = await this.simulateInstrument(inst, from, to, vixMap, p);
+      const trades = await this.simulateInstrument(inst, from, to, vixMap, p, dailyLossMap);
       allTrades.push(...trades);
     }
     allTrades.sort((a, b) => a.exitTime.localeCompare(b.exitTime));
@@ -71,6 +74,7 @@ export class OrbSimulatorService {
     from: Date, to: Date,
     vixMap: Map<string, number>,
     p: SimParams,
+    dailyLossMap: Map<string, number>,
   ) {
     const lookback = new Date(from); lookback.setMonth(lookback.getMonth() - 1);
     const [bars5, bars15] = await Promise.all([
@@ -153,12 +157,15 @@ export class OrbSimulatorService {
           trades.push(this.mk(inst, openTrade, openTrade.slPremium, barDate, reason));
           const isFailedSL = reason === 'SL';
           if (isFailedSL) {
-            lastSLExitTime = barDate;                                              // always track for legacy cooldown
-            if (p.directionBlock) blockedDirection = openTrade.direction;         // block direction if enabled
-          }
-          if (!p.smartCooldown) {
-            // Old behaviour: cooldown after any exit
             lastSLExitTime = barDate;
+            if (p.directionBlock) blockedDirection = openTrade.direction;
+          }
+          if (!p.smartCooldown) lastSLExitTime = barDate;
+          // Update shared daily loss tracker for cross-instrument hard stop
+          const closedTrade = trades[trades.length - 1];
+          if (closedTrade && closedTrade.netPnl < 0 && p.dailyLossLimit > 0) {
+            const dk = barDate.toISOString().slice(0, 10);
+            dailyLossMap.set(dk, (dailyLossMap.get(dk) ?? 0) + Math.abs(closedTrade.netPnl));
           }
           openTrade = null;
         } else if (hhmm >= EXIT_TIME) {
@@ -173,6 +180,13 @@ export class OrbSimulatorService {
       if (tradesOpenedToday >= maxTrades) continue;
       // Cooldown only after a failed SL (not after TRAIL_SL or EOD)
       if (lastSLExitTime && barDate.getTime() - lastSLExitTime.getTime() < COOLDOWN_MS) continue;
+
+      // Hard stop: daily loss limit across ALL instruments combined
+      if (p.dailyLossLimit > 0) {
+        const dk = barDate.toISOString().slice(0, 10);
+        const todayLoss = dailyLossMap.get(dk) ?? 0;
+        if (todayLoss >= p.dailyLossLimit) continue;
+      }
       if (rollingBars.length < Math.max(EMA_SLOW, RSI_PERIOD, ST_PERIOD * 2) + 5) continue;
       if (regime === 'CRISIS' && gapDir === 'NONE') continue;
 
