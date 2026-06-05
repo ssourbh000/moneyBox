@@ -552,9 +552,9 @@ export default function UnifiedSimulatorPage() {
         <div className="flex items-center gap-3">
           <Layers size={22} className="text-emerald-400" />
           <div>
-            <h1 className="text-xl font-bold text-white">Unified Simulator</h1>
+            <h1 className="text-xl font-bold text-white">Strategy Simulator</h1>
             <p className="text-sm text-gray-400">
-              Compare strategy combos (A + B + C) across the same date range and capital
+              Compare strategies across the same date range and capital
             </p>
           </div>
         </div>

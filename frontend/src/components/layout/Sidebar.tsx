@@ -58,7 +58,7 @@ const TOP_NAV = [
 ];
 
 const TOOLS_NAV = [
-  { href: '/unified-simulator',  label: 'Unified Simulator',  icon: BarChart2 },
+  { href: '/unified-simulator',  label: 'Strategy Simulator',  icon: BarChart2 },
 ];
 
 const TRADING_NAV = [
