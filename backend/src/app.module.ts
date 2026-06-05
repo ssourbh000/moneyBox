@@ -15,6 +15,7 @@ import { RiskModule } from './modules/risk/risk.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { Orb15BacktestModule } from './modules/orb15-backtest/orb15-backtest.module';
+import { OrbSimulatorModule } from './modules/orb-simulator/orb-simulator.module';
 import { EventAlphaBacktestModule } from './modules/event-alpha-backtest/event-alpha-backtest.module';
 import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-backtest.module';
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
@@ -46,6 +47,7 @@ import { EventAlphaPaperModule } from './modules/event-alpha-paper/event-alpha-p
     ReportsModule,
     AuditModule,
     Orb15BacktestModule,
+    OrbSimulatorModule,
     EventAlphaBacktestModule,
     PortfolioBacktestModule,
     LiveSignalModule,

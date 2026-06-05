@@ -31,6 +31,7 @@ const STRATEGIES = [
     dot: 'bg-purple-500',
     links: [
       { href: '/orb15-backtest',  label: 'Backtest',    icon: FlaskConical },
+      { href: '/orb-simulator',   label: 'SL Simulator', icon: BarChart2 },
       { href: '/paper-trading',   label: 'Paper Trade', icon: FileText },
     ],
   },
