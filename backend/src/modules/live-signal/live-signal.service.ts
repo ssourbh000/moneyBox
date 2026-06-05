@@ -20,8 +20,9 @@ const INSTRUMENTS = [
 const STARTING_CAPITAL   = 20_000;
 const RISK_FREE_RATE     = 0.07;
 const MAX_RISK           = 2_000;   // 10% of ₹20k per trade
-const SL_PCT             = 0.45;
-const TRAIL_PCT          = 0.20;
+const SL_PCT             = 0.12;   // fixed SL: exit if premium drops 12% from entry
+const TRAIL_TRIGGER      = 0.15;   // trail activates after premium rises 15% from entry
+const TRAIL_PCT          = 0.12;   // trail SL sits 12% below running peak
 const PARTIAL_MULT       = 1.8;
 const ORB_BARS           = 9;       // 9 × 5min = 45-min ORB
 const ENTRY_FROM         = 1000;
@@ -37,7 +38,7 @@ const ADX_MIN            = 20;
 const RSI_BULL_HIGH      = 55;
 const RSI_BEAR_HIGH      = 45;
 const ADX_MIN_HIGH       = 25;
-const TRAIL_PCT_HIGH     = 0.25;
+const TRAIL_PCT_HIGH     = 0.12;
 // CRISIS regime (VIX > 28)
 const RSI_BULL_CRISIS    = 65;
 const RSI_BEAR_CRISIS    = 35;
@@ -178,11 +179,13 @@ export class LiveSignalService {
       const cp = bsPrice(last5.close, open.strike, RISK_FREE_RATE, T, vix / 100,
         open.direction === 'CALL' ? 'call' : 'put');
 
-      // Update trailing SL
-      const newPeak = Math.max(open.peakPremium ?? open.entryPremium, cp);
-      const contTrailSL = +(newPeak * (1 - trailPct)).toFixed(2);
-      const newSL = Math.max(open.slPremium, contTrailSL);
-      const nowTrail = newSL > open.slPremium || open.trailSL;
+      // Update trailing SL — trail only activates after +20% rise from entry
+      const newPeak    = Math.max(open.peakPremium ?? open.entryPremium, cp);
+      const fixedSL    = +(open.entryPremium * (1 - SL_PCT)).toFixed(2);
+      const trailActive = cp >= open.entryPremium * (1 + TRAIL_TRIGGER) || open.trailSL;
+      const contTrailSL = trailActive ? +(newPeak * (1 - trailPct)).toFixed(2) : fixedSL;
+      const newSL      = Math.max(open.slPremium, contTrailSL);
+      const nowTrail   = trailActive;
 
       // Partial booking at 1.8× — reduce lots
       let newLots = open.lots;
@@ -312,12 +315,8 @@ export class LiveSignalService {
       dir === 'CALL' ? 'call' : 'put');
     if (ep < 10) return `${sym}: premium too low (₹${ep.toFixed(2)} < ₹10)`;
 
-    // ATR dynamic SL (range 25%–45%)
-    const atrArr = atr(rollingBars, 14);
-    const atrVal = atrArr[atrArr.length - 1] ?? 0;
-    const atrPct = atrVal > 0 ? Math.min(atrVal / bar.close, 0.03) : 0.015;
-    const dynSlPct = Math.max(0.25, Math.min(SL_PCT, atrPct * 15));
-    const slP = +(ep * dynSlPct).toFixed(2);
+    // Fixed SL for lot sizing
+    const slP = +(ep * (1 - SL_PCT)).toFixed(2);
     const lots = Math.max(1, Math.floor(MAX_RISK / ((ep - slP) * inst.lotSize)));
 
     const capitalNow = await this.getCurrentCapital();
