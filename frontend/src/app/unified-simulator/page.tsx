@@ -507,12 +507,14 @@ export default function UnifiedSimulatorPage() {
           };
         }
 
-        const { data } = await api.post('/unified-simulator/run', {
+        const { data: rawData } = await api.post('/unified-simulator/run', {
           fromDate, toDate, capital, strategies,
         });
 
-        const combined = computeCombined(data, capital);
-        setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'done', data, combined } }));
+        // rawData is the full DB document — strategy results live in rawData.results
+        const stratResults: ComboResultData = rawData.results ?? rawData;
+        const combined = computeCombined(stratResults, capital);
+        setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'done', data: stratResults, combined } }));
       } catch (e: unknown) {
         setResults(r => ({
           ...r,
@@ -634,60 +636,73 @@ export default function UnifiedSimulatorPage() {
           </button>
         </div>
 
-        {/* Results comparison table */}
-        {doneResults.length > 0 && (
-          <div className="bg-gray-800 rounded-lg overflow-x-auto">
-            <div className="px-4 py-3 border-b border-gray-700">
-              <h2 className="text-sm font-semibold text-gray-300">Results Comparison</h2>
+        {/* Results — metric cards per combo (Portfolio Sim style) */}
+        {doneResults.map(({ combo, combined }) => {
+          const isBest = best?.combo.id === combo.id;
+          const ddPct = capital > 0 ? ((combined.maxDrawdown / capital) * 100).toFixed(1) : '0.0';
+          return (
+            <div key={combo.id} className={`rounded-xl border p-5 space-y-4 ${isBest ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-gray-700 bg-gray-800'}`}>
+              {/* Combo header */}
+              <div className="flex items-center gap-2">
+                {isBest && <Trophy size={15} className="text-yellow-400" />}
+                <span className={`font-semibold text-base ${isBest ? 'text-yellow-300' : 'text-white'}`}>{combo.label}</span>
+                <div className="flex gap-1 ml-1">
+                  {combo.a && <span className="text-[10px] bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded">A</span>}
+                  {combo.b && <span className="text-[10px] bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded">B</span>}
+                  {combo.c && <span className="text-[10px] bg-yellow-900 text-yellow-300 px-1.5 py-0.5 rounded">C</span>}
+                </div>
+                {isBest && <span className="ml-auto text-xs text-yellow-400/70">Score {scored.find(s => s.combo.id === combo.id)?.score}</span>}
+              </div>
+              {/* Row 1 */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Starting Capital</p>
+                  <p className="text-lg font-bold text-white">₹{capital.toLocaleString('en-IN')}</p>
+                </div>
+                <div className={`rounded-lg p-3 ${combined.netPnl >= 0 ? 'bg-emerald-900/40 border border-emerald-700/40' : 'bg-red-900/20'}`}>
+                  <p className="text-xs text-gray-400 mb-1">Final Capital</p>
+                  <p className={`text-lg font-bold ${pnlCls(combined.netPnl)}`}>₹{combined.finalCapital.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+                </div>
+                <div className={`rounded-lg p-3 ${combined.netPnl >= 0 ? 'bg-emerald-900/40 border border-emerald-700/40' : 'bg-red-900/20'}`}>
+                  <p className="text-xs text-gray-400 mb-1">Net P&L</p>
+                  <p className={`text-lg font-bold ${pnlCls(combined.netPnl)}`}>{fmt(combined.netPnl)}</p>
+                </div>
+                <div className={`rounded-lg p-3 ${combined.roi >= 0 ? 'bg-emerald-900/40 border border-emerald-700/40' : 'bg-red-900/20'}`}>
+                  <p className="text-xs text-gray-400 mb-1">ROI</p>
+                  <p className={`text-lg font-bold ${pnlCls(combined.roi)}`}>{pct(combined.roi)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">on ₹{capital.toLocaleString('en-IN')}</p>
+                </div>
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Total Trades</p>
+                  <p className="text-lg font-bold text-white">{combined.totalTrades}</p>
+                </div>
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Overall WR</p>
+                  <p className={`text-lg font-bold ${combined.winRate >= 65 ? 'text-emerald-400' : combined.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{pct(combined.winRate)}</p>
+                </div>
+              </div>
+              {/* Row 2 */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Profit Factor</p>
+                  <p className="text-lg font-bold text-white">{combined.profitFactor.toFixed(2)}</p>
+                </div>
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Sharpe Ratio</p>
+                  <p className="text-lg font-bold text-white">{combined.sharpeRatio.toFixed(2)}</p>
+                </div>
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Max Drawdown</p>
+                  <p className="text-lg font-bold text-red-400">₹{combined.maxDrawdown.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+                </div>
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">DD / Capital</p>
+                  <p className="text-lg font-bold text-white">{ddPct}%</p>
+                </div>
+              </div>
             </div>
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500 border-b border-gray-700">
-                  <th className="py-2 px-4">Combo</th>
-                  <th className="py-2 px-3">Strats</th>
-                  <th className="py-2 px-3">Trades</th>
-                  <th className="py-2 px-3">Win Rate</th>
-                  <th className="py-2 px-3">Net P&L</th>
-                  <th className="py-2 px-3">PF</th>
-                  <th className="py-2 px-3">Sharpe</th>
-                  <th className="py-2 px-3">Max DD</th>
-                  <th className="py-2 px-3">ROI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {doneResults.map(({ combo, combined }) => {
-                  const isBest = best?.combo.id === combo.id;
-                  return (
-                    <tr key={combo.id} className={`border-b border-gray-700 ${isBest ? 'bg-yellow-500/5' : 'hover:bg-gray-750'}`}>
-                      <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-2">
-                          {isBest && <Trophy size={12} className="text-yellow-400 shrink-0" />}
-                          <span className={`text-sm ${isBest ? 'text-yellow-300 font-semibold' : 'text-gray-300'}`}>{combo.label}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex gap-0.5">
-                          {combo.a && <span className="text-[10px] bg-purple-900 text-purple-300 px-1 rounded">A</span>}
-                          {combo.b && <span className="text-[10px] bg-blue-900 text-blue-300 px-1 rounded">B</span>}
-                          {combo.c && <span className="text-[10px] bg-yellow-900 text-yellow-300 px-1 rounded">C</span>}
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 text-gray-300">{combined.totalTrades}</td>
-                      <td className={`py-2.5 px-3 font-medium ${combined.winRate >= 65 ? 'text-emerald-400' : combined.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {pct(combined.winRate)}
-                      </td>
-                      <td className={`py-2.5 px-3 font-medium ${pnlCls(combined.netPnl)}`}>{fmt(combined.netPnl)}</td>
-                      <td className="py-2.5 px-3 text-gray-300">{combined.profitFactor.toFixed(1)}</td>
-                      <td className="py-2.5 px-3 text-gray-300">{combined.sharpeRatio.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-red-400">₹{combined.maxDrawdown.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
-                      <td className={`py-2.5 px-3 font-bold ${pnlCls(combined.roi)}`}>{pct(combined.roi)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+          );
+        })}
 
         {/* Composite score bar chart */}
         {scored.length > 0 && (
