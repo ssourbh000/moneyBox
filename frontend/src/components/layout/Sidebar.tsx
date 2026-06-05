@@ -64,8 +64,9 @@ const TOP_NAV = [
 ];
 
 const TOOLS_NAV = [
-  { href: '/portfolio-backtest', label: 'Portfolio Sim',     icon: BarChart2 },
-  { href: '/strategy-compare',   label: 'Strategy Compare', icon: GitCompare },
+  { href: '/portfolio-backtest', label: 'Portfolio Sim',      icon: BarChart2 },
+  { href: '/unified-simulator',  label: 'Unified Simulator',  icon: BarChart2 },
+  { href: '/strategy-compare',   label: 'Strategy Compare',   icon: GitCompare },
 ];
 
 const TRADING_NAV = [

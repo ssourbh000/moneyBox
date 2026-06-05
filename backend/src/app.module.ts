@@ -21,6 +21,9 @@ import { PortfolioBacktestModule } from './modules/portfolio-backtest/portfolio-
 import { LiveSignalModule } from './modules/live-signal/live-signal.module';
 import { IVCrushModule } from './modules/iv-crush/iv-crush.module';
 import { EventAlphaPaperModule } from './modules/event-alpha-paper/event-alpha-paper.module';
+import { IVCrushSimulatorModule } from './modules/iv-crush-simulator/iv-crush-simulator.module';
+import { EventAlphaSimulatorModule } from './modules/event-alpha-simulator/event-alpha-simulator.module';
+import { UnifiedSimulatorModule } from './modules/unified-simulator/unified-simulator.module';
 
 @Module({
   imports: [
@@ -53,6 +56,9 @@ import { EventAlphaPaperModule } from './modules/event-alpha-paper/event-alpha-p
     LiveSignalModule,
     IVCrushModule,
     EventAlphaPaperModule,
+    IVCrushSimulatorModule,
+    EventAlphaSimulatorModule,
+    UnifiedSimulatorModule,
   ],
 })
 export class AppModule {}

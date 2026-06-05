@@ -8,5 +8,6 @@ import { OrbSimulatorService } from './orb-simulator.service';
   imports: [MongooseModule.forFeature([{ name: MarketBar.name, schema: MarketBarSchema }])],
   controllers: [OrbSimulatorController],
   providers: [OrbSimulatorService],
+  exports: [OrbSimulatorService],
 })
 export class OrbSimulatorModule {}
