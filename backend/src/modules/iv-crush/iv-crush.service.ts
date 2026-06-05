@@ -96,8 +96,8 @@ export class IVCrushService {
         return;
       }
 
-      // Try entry between 9:20–9:35 AM
-      if (hhmm >= 920 && hhmm <= 935) {
+      // Try entry between 9:20–9:40 AM (extended to handle Angel One rate-limit delays)
+      if (hhmm >= 920 && hhmm <= 940) {
         await this.tryEntry(dk, now);
       } else {
         this.lastTick = { time: now.toISOString(), istHHMM: hhmm, status: 'WAITING', message: `Waiting for 9:20 AM entry window` };
