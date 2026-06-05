@@ -110,10 +110,7 @@ const DEFAULT_B: BParams = { tpPct: 15, slPct: 30, gapFilter: 0.8 };
 const DEFAULT_C: CParams = { tpMult: 2.0, slMult: 0.5, vixThresh: 18, gapThresh: 1.2 };
 
 const DEFAULT_COMBOS: Combo[] = [
-  { id: 1, label: 'A only (current)',  a: true,  b: false, c: false, aParams: { ...DEFAULT_A }, bParams: { ...DEFAULT_B }, cParams: { ...DEFAULT_C } },
-  { id: 2, label: 'B only (30% SL)',   a: false, b: true,  c: false, aParams: { ...DEFAULT_A }, bParams: { tpPct: 15, slPct: 30, gapFilter: 0.8 }, cParams: { ...DEFAULT_C } },
-  { id: 3, label: 'B only (20% SL)',   a: false, b: true,  c: false, aParams: { ...DEFAULT_A }, bParams: { tpPct: 15, slPct: 20, gapFilter: 0.8 }, cParams: { ...DEFAULT_C } },
-  { id: 4, label: 'A + B combined',    a: true,  b: true,  c: false, aParams: { ...DEFAULT_A }, bParams: { tpPct: 15, slPct: 30, gapFilter: 0.8 }, cParams: { ...DEFAULT_C } },
+  { id: 1, label: 'A — Breakout Rider', a: true, b: false, c: false, aParams: { ...DEFAULT_A }, bParams: { ...DEFAULT_B }, cParams: { ...DEFAULT_C } },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -442,7 +439,7 @@ export default function UnifiedSimulatorPage() {
     Object.fromEntries(DEFAULT_COMBOS.map(c => [c.id, { id: c.id, status: 'idle' as const }]))
   );
   const [running,    setRunning]    = useState(false);
-  const [nextId,     setNextId]     = useState(5);
+  const [nextId,     setNextId]     = useState(2);
   const [expandedId,  setExpandedId]  = useState<number | null>(null);
   const [pastRuns,    setPastRuns]    = useState<any[]>([]);
   const [selectedRun, setSelectedRun] = useState<any | null>(null);
