@@ -136,7 +136,7 @@ export function adxSeries(candles: OHLCV[], period: number): number[] {
 }
 
 /** Binary upper-bound: returns first index where arr[i] > target. */
-export function upperBound(arr: number[], target: number): number {
+function upperBound(arr: number[], target: number): number {
   let lo = 0;
   let hi = arr.length;
   while (lo < hi) {

@@ -177,7 +177,7 @@ export default function StrategyComparePage() {
           <BarChart2 size={24} className="text-indigo-400" />
           <div>
             <h1 className="text-xl font-bold text-white">Strategy Comparison</h1>
-            <p className="text-sm text-gray-400">Run B and D strategies on the same data — pick the winner</p>
+            <p className="text-sm text-gray-400">Run A and C strategies on the same data — pick the winner</p>
           </div>
         </div>
 
@@ -199,7 +199,7 @@ export default function StrategyComparePage() {
             className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-sm font-semibold"
           >
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-            {running ? 'Running…' : 'Run B & D'}
+            {running ? 'Running…' : 'Run A & C'}
           </button>
           {completedCount > 0 && (
             <span className="text-sm text-gray-400 self-center">{completedCount} / {STRATEGIES.length} completed</span>
@@ -243,7 +243,7 @@ export default function StrategyComparePage() {
           <div className="bg-gray-800 rounded-lg p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold text-gray-300 mb-3">
               Side-by-Side Metrics
-              <span className="text-xs text-gray-500 ml-2">(delta vs Original in brackets)</span>
+              <span className="text-xs text-gray-500 ml-2">(delta vs A — Breakout Rider)</span>
             </h2>
             <table className="w-full text-sm text-left min-w-[900px]">
               <thead>

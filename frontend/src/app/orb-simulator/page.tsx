@@ -5,6 +5,7 @@ import AppShell from '@/components/layout/AppShell';
 import EquityChart from '@/components/charts/EquityChart';
 import { Play, Plus, Trash2, RefreshCw, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '@/lib/api';
+import { fmt, pnlCls } from '@/lib/trade-fmt';
 import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -62,11 +63,7 @@ const CAPITAL_OPTIONS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(v: number) {
-  return (v >= 0 ? '+' : '') + '₹' + Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
-}
 function pct(v: number) { return v.toFixed(1) + '%'; }
-function pnlCls(v: number) { return v >= 0 ? 'text-emerald-400' : 'text-red-400'; }
 
 function score(m: Metrics): number {
   const wrScore  = m.winRate * 0.30;
@@ -208,8 +205,8 @@ export default function OrbSimulatorPage() {
           dailyLossLimit: combo.dailyLossLimit,
         });
         setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'done', metrics: data.metrics } }));
-      } catch (e: any) {
-        setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'error', error: e.message } }));
+      } catch (e: unknown) {
+        setResults(r => ({ ...r, [combo.id]: { id: combo.id, status: 'error', error: e instanceof Error ? e.message : String(e) } }));
       }
     }));
     setRunning(false);

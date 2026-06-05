@@ -72,7 +72,7 @@ export function isEngineActive(
   const ageMs  = Date.now() - new Date(tick.time).getTime();
   const recent = ageMs < 10 * 60_000;
   if (mode === 'status') return recent && tick.status !== 'OUTSIDE_WINDOW';
-  return recent && !tick.results!.some(r => r.toLowerCase().includes('outside'));
+  return recent && !(tick.results ?? []).some(r => r.toLowerCase().includes('outside'));
 }
 
 export const TICK_STATUS_CLS: Record<string, string> = {

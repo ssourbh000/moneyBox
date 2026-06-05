@@ -146,7 +146,7 @@ export default function PortfolioBacktestPage() {
 
   const handleRun = async () => {
     setLoading(true);
-    setStatus('Queued — running B + C1 + D strategies simultaneously…');
+    setStatus('Queued — running A + B + C strategies simultaneously…');
     try {
       const run = await portfolioBacktestService.run(fromDate, toDate, parseInt(capital) || 100_000);
       pollRef.current = setInterval(async () => {
@@ -159,7 +159,7 @@ export default function PortfolioBacktestPage() {
             await loadRuns();
             setSelected(updated);
           } else {
-            setStatus('Running ORB + C1 + Event in parallel…');
+            setStatus('Running A (ORB) + B (Fade) + C (Event) in parallel…');
           }
         } catch { if (pollRef.current) clearInterval(pollRef.current); setLoading(false); }
       }, 5000);

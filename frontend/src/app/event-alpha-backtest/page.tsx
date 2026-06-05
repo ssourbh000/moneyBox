@@ -21,8 +21,6 @@ interface EATrade {
   entryStraddle: number;
   exitStraddle: number;
   lots: number;
-  lotSize: number;
-  grossPnl: number;
   netPnl: number;
   exitReason: ExitReason;
   vix: number;

@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Orb15BacktestRun, Orb15BacktestRunDocument, O15Status } from './schemas/orb15-backtest-run.schema';
 import { MarketDataService } from '../market-data/market-data.service';
-import { ema, rsi, adx, atr, OHLCV } from '../strategies/indicators';
+import { ema, rsi, adx, OHLCV } from '../strategies/indicators';
 import {
   bsPrice, itmStrike, calcVWAP, calcSupertrend, calcORB,
   istHHMM, istDayOfWeek, isNewDay,
@@ -66,13 +66,13 @@ interface O15Trade {
   symbol: string; direction: 'CALL' | 'PUT'; entryTime: string; exitTime: string;
   strike: number; entryPremium: number; exitPremium: number; lots: number;
   lotSize: number; grossPnl: number; netPnl: number;
-  exitReason: 'SL' | 'TARGET' | 'TRAIL_SL' | 'EOD'; vix: number;
+  exitReason: 'SL' | 'TRAIL_SL' | 'EOD'; vix: number;
   meta: Record<string, number | string>;
 }
 
 interface OpenO15Trade {
   direction: 'CALL' | 'PUT'; strike: number; entryPremium: number; entryTime: Date;
-  slPremium: number; targetPremium: number; lots: number; partialBooked: boolean;
+  slPremium: number; lots: number; partialBooked: boolean;
   trailSL: boolean; peakPremium: number; vix: number; meta: Record<string, number | string>;
 }
 
@@ -280,7 +280,7 @@ export class Orb15BacktestService {
       const slP = +(ep * (1 - SL_PCT)).toFixed(2);
       const lots = Math.max(1, Math.floor(MAX_RISK_PER_TRADE / ((ep - slP) * inst.lotSize)));
       tradesOpenedToday++;
-      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday, gapDir, adx: +adxVal.toFixed(1), regime, vixVal: +vix.toFixed(1) } };
+      openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday, gapDir, adx: +adxVal.toFixed(1), regime, vixVal: +vix.toFixed(1) } };
     }
     return trades;
   }

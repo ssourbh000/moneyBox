@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { MarketBar, MarketBarDocument } from '../market-data/schemas/market-bar.schema';
 import { bsPrice, itmStrike, calcVWAP, calcSupertrend, calcORB, istHHMM, istDayOfWeek, isNewDay } from '../strategies/option-indicators';
-import { ema, rsi, adx, atr, OHLCV } from '../strategies/indicators';
+import { ema, rsi, adx, OHLCV } from '../strategies/indicators';
 import { buildVixMap, computeMetrics } from '../backtest-shared/metrics.util';
 import { SimParams } from './orb-simulator.controller';
 

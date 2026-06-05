@@ -72,7 +72,7 @@ function istDate(iso: string) {
 
 // ── Today Card ────────────────────────────────────────────────────────────────
 
-function TodayCard({ open, today }: { open: PaperTrade[]; today: PaperTrade[] }) {
+function TodayCard({ today }: { today: PaperTrade[] }) {
   if (today.length === 0) {
     return (
       <div className="bg-gray-800 rounded-xl border border-gray-700 px-5 py-6">
@@ -268,7 +268,7 @@ export default function PaperTradingPage() {
               <span className="text-sm font-medium text-gray-300">Last Cron Tick</span>
               {lastTick && (
                 <span className="text-xs text-gray-600">
-                  {new Date(lastTick.time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST
+                  {istTime(lastTick.time)} IST
                 </span>
               )}
             </div>
@@ -295,7 +295,7 @@ export default function PaperTradingPage() {
         </div>
 
         {/* Today Card */}
-        <TodayCard open={open} today={today} />
+        <TodayCard today={today} />
 
         {/* Summary cards */}
         {account && account.totalTrades > 0 && (
@@ -382,11 +382,7 @@ export default function PaperTradingPage() {
                       <td className="py-2 px-3">{regimeBadge(t.regime)}</td>
                       <td className="py-2 px-3 text-center">
                         {t.exitReason ? (
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            t.exitReason === 'TRAIL_SL' ? 'bg-yellow-500/10 text-yellow-400' :
-                            t.exitReason === 'SL'       ? 'bg-red-500/10 text-red-400'       :
-                            'bg-gray-700 text-gray-400'
-                          }`}>{t.exitReason}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${exitReasonCls(t.exitReason)}`}>{t.exitReason}</span>
                         ) : '—'}
                       </td>
                       <td className={`py-2 px-4 text-right font-mono font-bold ${

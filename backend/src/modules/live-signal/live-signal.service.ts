@@ -38,7 +38,6 @@ const ADX_MIN            = 20;
 const RSI_BULL_HIGH      = 55;
 const RSI_BEAR_HIGH      = 45;
 const ADX_MIN_HIGH       = 25;
-const TRAIL_PCT_HIGH     = 0.12;
 // CRISIS regime (VIX > 28)
 const RSI_BULL_CRISIS    = 65;
 const RSI_BEAR_CRISIS    = 35;
@@ -170,7 +169,7 @@ export class LiveSignalService {
     const rsiBull  = regime === 'CRISIS' ? RSI_BULL_CRISIS : regime === 'HIGH' ? RSI_BULL_HIGH  : RSI_BULL;
     const rsiBear  = regime === 'CRISIS' ? RSI_BEAR_CRISIS : regime === 'HIGH' ? RSI_BEAR_HIGH  : RSI_BEAR;
     const adxMin   = regime === 'CRISIS' ? ADX_MIN_CRISIS  : regime === 'HIGH' ? ADX_MIN_HIGH   : ADX_MIN;
-    const trailPct = regime === 'HIGH' ? TRAIL_PCT_HIGH : TRAIL_PCT;
+    const trailPct = TRAIL_PCT;
     const maxTrades = regime === 'CRISIS' ? MAX_TRADES_CRISIS : MAX_TRADES_PER_DAY;
 
     // ── Manage open position ──────────────────────────────────────────────────

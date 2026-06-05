@@ -140,7 +140,7 @@ export default function EventAlphaPaperPage() {
       setRecent(r);
       setSummary(s);
       if (lt) setLastTick(lt);
-    } catch (_) {}
+    } catch (err) { console.error('[EventAlphaPaper load]', err); }
     finally { setLoading(false); }
   }, []);
 
@@ -328,12 +328,7 @@ export default function EventAlphaPaperPage() {
                       </td>
                       <td className="py-2 px-3 text-center">
                         {t.exitReason ? (
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            t.exitReason === 'TP'   ? 'bg-emerald-500/10 text-emerald-400' :
-                            t.exitReason === 'SL'   ? 'bg-red-500/10 text-red-400'         :
-                            t.exitReason === 'TIME' ? 'bg-gray-700 text-gray-400'           :
-                            'bg-gray-700 text-gray-400'
-                          }`}>{t.exitReason}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${exitReasonCls(t.exitReason)}`}>{t.exitReason}</span>
                         ) : (
                           <span className="text-gray-600">
                             {t.status === 'SKIPPED' ? (t.skipReason?.slice(0, 14) + '…') : '—'}

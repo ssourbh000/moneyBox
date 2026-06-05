@@ -3,7 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { EventAlphaRun, EventAlphaRunDocument, EAStatus } from './schemas/event-alpha-backtest-run.schema';
 import { MarketDataService } from '../market-data/market-data.service';
-import { OHLCV } from '../strategies/indicators';
 import { bsPrice, istHHMM, istDayOfWeek, isNewDay } from '../strategies/option-indicators';
 import { computeMetrics, buildVixMap } from '../backtest-shared/metrics.util';
 
