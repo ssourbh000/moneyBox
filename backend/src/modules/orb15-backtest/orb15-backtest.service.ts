@@ -26,8 +26,9 @@ const INSTRUMENTS = [
 
 const RISK_FREE_RATE     = 0.07;
 const MAX_RISK_PER_TRADE = 4000;
-const SL_PCT             = 0.45;
-const TRAIL_PCT          = 0.20;   // trail SL at 20% below running peak premium
+const SL_PCT             = 0.12;   // fixed SL: exit if premium drops 12% from entry
+const TRAIL_TRIGGER      = 0.15;   // trail activates after premium rises 15% from entry
+const TRAIL_PCT          = 0.12;   // trail SL sits 12% below running peak
 const PARTIAL_MULT       = 1.8;
 const ORB_BARS           = 9;      // 9 × 5min = 45-min opening range
 const ENTRY_FROM         = 1000;
@@ -44,7 +45,7 @@ const ADX_MIN            = 20;
 const RSI_BULL_HIGH      = 55;
 const RSI_BEAR_HIGH      = 45;
 const ADX_MIN_HIGH       = 25;
-const TRAIL_PCT_HIGH     = 0.25;
+const TRAIL_PCT_HIGH     = 0.12;
 // CRISIS regime params (VIX > 28)
 const RSI_BULL_CRISIS    = 65;
 const RSI_BEAR_CRISIS    = 35;
@@ -208,10 +209,11 @@ export class Orb15BacktestService {
       if (openTrade) {
         const T = this.tte(barDate);
         const cp = bsPrice(bar.close, openTrade.strike, RISK_FREE_RATE, T, vix / 100, openTrade.direction === 'CALL' ? 'call' : 'put');
-        // Continuous trailing SL with regime-aware trail percentage
+        // Trail activates only after +15% rise from entry, then trails 12% below peak
         if (cp > openTrade.peakPremium) openTrade.peakPremium = cp;
-        const contTrailSL = +(openTrade.peakPremium * (1 - trailPct)).toFixed(2);
-        if (contTrailSL > openTrade.slPremium) { openTrade.slPremium = contTrailSL; openTrade.trailSL = true; }
+        const trailActive = cp >= openTrade.entryPremium * (1 + TRAIL_TRIGGER) || openTrade.trailSL;
+        const contTrailSL = trailActive ? +(openTrade.peakPremium * (1 - trailPct)).toFixed(2) : openTrade.slPremium;
+        if (trailActive && contTrailSL > openTrade.slPremium) { openTrade.slPremium = contTrailSL; openTrade.trailSL = true; }
         // Partial TP at 1.8× — exit half lots
         if (!openTrade.partialBooked && cp >= openTrade.entryPremium * PARTIAL_MULT) { openTrade.partialBooked = true; openTrade.lots = Math.max(1, Math.floor(openTrade.lots / 2)); }
         if (cp <= openTrade.slPremium) { trades.push(this.mk(inst, openTrade, openTrade.slPremium, barDate, openTrade.trailSL ? 'TRAIL_SL' : 'SL')); lastTradeExitTime = barDate; openTrade = null; }
@@ -275,12 +277,7 @@ export class Orb15BacktestService {
       const T = this.tte(barDate);
       const ep = bsPrice(bar.close, strike, RISK_FREE_RATE, T, vix / 100, dir === 'CALL' ? 'call' : 'put');
       if (ep < 10) continue;
-      // ATR dynamic SL: tighter on low-vol days, wider on high-vol (range 25%–45%)
-      const atrArr = atr(rollingBars, 14);
-      const atrVal = atrArr[atrArr.length - 1] ?? 0;
-      const atrPct = atrVal > 0 ? Math.min(atrVal / bar.close, 0.03) : 0.015;
-      const dynSlPct = Math.max(0.25, Math.min(SL_PCT, atrPct * 15));
-      const slP = +(ep * dynSlPct).toFixed(2);
+      const slP = +(ep * (1 - SL_PCT)).toFixed(2);
       const lots = Math.max(1, Math.floor(MAX_RISK_PER_TRADE / ((ep - slP) * inst.lotSize)));
       tradesOpenedToday++;
       openTrade = { direction: dir, strike, entryPremium: +ep.toFixed(2), entryTime: barDate, slPremium: slP, targetPremium: +(ep * 2.5).toFixed(2), lots, partialBooked: false, trailSL: false, peakPremium: +ep.toFixed(2), vix, meta: { orbHigh: +orbHigh.toFixed(2), orbLow: +orbLow.toFixed(2), vwap: +vwV.toFixed(2), ema9: +efN.toFixed(2), ema21: +esN.toFixed(2), rsi: +rsiV.toFixed(1), orbBars: ORB_BARS, tradeNo: tradesOpenedToday, gapDir, adx: +adxVal.toFixed(1), regime, vixVal: +vix.toFixed(1) } };
