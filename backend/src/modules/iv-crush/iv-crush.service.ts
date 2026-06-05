@@ -63,7 +63,7 @@ export class IVCrushService {
   ) {}
 
   // Runs every 5 min, 9:15 AM – 10:15 AM IST (3:45–4:45 UTC)
-  @Cron('*/5 3-4 * * 1-5', { timeZone: 'UTC' })
+  @Cron('2-59/5 3-4 * * 1-5', { timeZone: 'UTC' })
   async tick() {
     const now = new Date();
     const hhmm = istHHMM(now);

@@ -51,7 +51,7 @@ export class EventAlphaPaperService {
   ) {}
 
   // Runs every 5 min, 9:15 AM–3:35 PM IST (3:45–10:05 AM UTC)
-  @Cron('*/5 3-9 * * 1-5', { timeZone: 'UTC' })
+  @Cron('2-59/5 3-9 * * 1-5', { timeZone: 'UTC' })
   async tick() {
     const now = new Date();
     const hhmm = istHHMM(now);
@@ -89,7 +89,7 @@ export class EventAlphaPaperService {
       }
 
       // Try entry between 9:20–9:35 AM
-      if (hhmm >= 920 && hhmm <= 935) {
+      if (hhmm >= 920 && hhmm <= 940) {
         await this.tryEntry(dk, now);
       } else {
         this.lastTick = {

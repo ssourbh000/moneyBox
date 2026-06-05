@@ -50,12 +50,26 @@ export class MarketDataService {
     this.logger.log('Intraday seed: NIFTY 50 5m, NIFTY BANK 5m, then 15m, day, VIX');
     for (const task of SEED_TASKS) {
       const key = `${task.symbol}:${ANGEL_INTERVAL_MAP[task.angelInterval]}`;
+      await this.seedWithRetry(task, key, todayOpen, now);
+      await new Promise(r => setTimeout(r, 1000)); // 1s between calls
+    }
+  }
+
+  private async seedWithRetry(
+    task: { symbol: string; exchange: string; token: string; angelInterval: string },
+    key: string,
+    from: Date,
+    to: Date,
+    maxRetries = 3,
+  ) {
+    const interval = ANGEL_INTERVAL_MAP[task.angelInterval];
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const candles = await this.angelOne.getCandles(task.token, task.exchange, task.angelInterval, todayOpen, now);
+        const candles = await this.angelOne.getCandles(task.token, task.exchange, task.angelInterval, from, to);
         if (candles.length) {
           const ops = candles.map(c => ({
             updateOne: {
-              filter: { symbol: task.symbol, exchange: task.exchange, interval: ANGEL_INTERVAL_MAP[task.angelInterval], timestamp: c.timestamp },
+              filter: { symbol: task.symbol, exchange: task.exchange, interval, timestamp: c.timestamp },
               update: { $set: { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume } },
               upsert: true,
             },
@@ -63,10 +77,18 @@ export class MarketDataService {
           const res = await this.barModel.bulkWrite(ops);
           this.logger.log(`${key}: fetched=${candles.length} stored=${(res.upsertedCount ?? 0) + (res.modifiedCount ?? 0)}`);
         }
+        return; // success
       } catch (err: any) {
-        this.logger.error(`Intraday seed failed for ${key}: ${err.message}`);
+        const isRateLimit = err.message?.toLowerCase().includes('rate') || err.message?.toLowerCase().includes('access denied');
+        if (isRateLimit && attempt < maxRetries) {
+          const wait = attempt * 30_000; // 30s, 60s backoff
+          this.logger.warn(`${key}: rate limited (attempt ${attempt}/${maxRetries}), retrying in ${wait / 1000}s…`);
+          await new Promise(r => setTimeout(r, wait));
+        } else {
+          this.logger.error(`Intraday seed failed for ${key}: ${err.message}`);
+          return;
+        }
       }
-      await new Promise(r => setTimeout(r, 1000)); // 1s between calls — avoids rate limit
     }
   }
 
