@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import AppShell from '@/components/layout/AppShell';
 import EquityChart from '@/components/charts/EquityChart';
-import { Play, Plus, Trash2, RefreshCw, Trophy, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import { Play, Plus, Trash2, RefreshCw, Trophy, ChevronDown, ChevronUp, Layers, X } from 'lucide-react';
 import api from '@/lib/api';
 import { fmt, pnlCls } from '@/lib/trade-fmt';
 import { TWO_YEARS_AGO, TODAY } from '@/lib/dates';
@@ -532,6 +532,13 @@ export default function UnifiedSimulatorPage() {
     api.get('/unified-simulator/list').then(r => setPastRuns(r.data)).catch(() => {});
   };
 
+  const deleteRun = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await api.delete(`/unified-simulator/${id}`).catch(() => {});
+    setPastRuns(r => r.filter(run => run._id !== id));
+    if (selectedRun?._id === id) setSelectedRun(null);
+  };
+
   const doneResults = combos
     .filter(c => results[c.id]?.status === 'done' && results[c.id]?.combined)
     .map(c => ({ combo: c, combined: results[c.id].combined! }));
@@ -796,9 +803,18 @@ export default function UnifiedSimulatorPage() {
                       {run.comboParams?.strategies?.c && <span className="text-xs bg-yellow-900 text-yellow-300 px-1.5 py-0.5 rounded">C</span>}
                     </div>
                   </div>
-                  <span className="text-xs text-gray-600">
-                    {new Date(run.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600">
+                      {new Date(run.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                    <button
+                      onClick={e => deleteRun(run._id, e)}
+                      className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded"
+                      title="Delete run"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -56,4 +56,9 @@ export class UnifiedSimulatorService {
   async get(id: string) {
     return this.model.findById(id).lean();
   }
+
+  async remove(userId: string, id: string) {
+    await this.model.deleteOne({ _id: id, userId: new Types.ObjectId(userId) });
+    return { deleted: true };
+  }
 }

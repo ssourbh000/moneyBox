@@ -58,7 +58,6 @@ const TOP_NAV = [
 ];
 
 const TOOLS_NAV = [
-  { href: '/portfolio-backtest', label: 'Portfolio Sim',      icon: BarChart2 },
   { href: '/unified-simulator',  label: 'Unified Simulator',  icon: BarChart2 },
 ];
 
